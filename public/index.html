@@ -1,0 +1,1242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Webinar → GHL Sync</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #09090b;
+    --card:      #111114;
+    --card-alt:  #16161a;
+    --card-hi:   #1a1a1e;
+    --border:    #202024;
+    --border-hi: #2a2a30;
+    --text:      #fafafa;
+    --muted:     #a1a1aa;
+    --dim:       #52525b;
+    --green:     #22c55e;
+    --red:       #ef4444;
+    --amber:     #f59e0b;
+    --blue:      #3b82f6;
+    --purple:    #a855f7;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 100vh;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size: 32px 32px;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; text-decoration: none; }
+  button, input, select, textarea { font-family: inherit; font-size: inherit; }
+
+  .container { max-width: 1280px; margin: 0 auto; padding: 32px 24px 64px; }
+
+  /* ─── Top nav ─── */
+  nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 32px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .brand {
+    display: flex; flex-direction: column; gap: 4px;
+    cursor: pointer;
+  }
+  .brand-name {
+    font-size: 10px; letter-spacing: 0.18em;
+    color: var(--dim); text-transform: uppercase; font-weight: 500;
+  }
+  .brand-title {
+    font-size: 20px; font-weight: 600; letter-spacing: -0.02em;
+  }
+  .brand-title .arrow { color: var(--dim); margin: 0 8px; font-weight: 300; }
+
+  .status-cluster { display: flex; align-items: center; gap: 16px; }
+  .status-pill {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 12px;
+    background: rgba(34, 197, 94, 0.08);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    border-radius: 4px;
+    font-size: 11px; color: var(--green);
+    letter-spacing: 0.05em; text-transform: uppercase; font-weight: 500;
+  }
+  .status-pill.offline {
+    background: rgba(239, 68, 68, 0.08);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: var(--red);
+  }
+  .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  .status-pill.offline .dot { background: var(--red); animation: none; }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
+    50%      { opacity: 0.6; box-shadow: 0 0 0 4px rgba(34, 197, 94, 0); }
+  }
+
+  /* ─── Breadcrumb ─── */
+  .crumbs {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; color: var(--dim);
+    letter-spacing: 0.1em; text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+  .crumbs a { color: var(--muted); transition: color 0.15s ease; }
+  .crumbs a:hover { color: var(--text); }
+  .crumb-sep { color: var(--dim); }
+
+  /* ─── Headers ─── */
+  .view-header {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    margin-bottom: 24px;
+  }
+  .view-title {
+    font-size: 22px; font-weight: 500; letter-spacing: -0.02em;
+  }
+  .view-subtitle {
+    font-size: 11px; color: var(--dim);
+    letter-spacing: 0.12em; text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  /* ─── Stat grid ─── */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 14px 16px;
+    position: relative;
+  }
+  .stat-label {
+    font-size: 10px; letter-spacing: 0.12em;
+    color: var(--dim); text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .stat-value {
+    font-size: 24px; font-weight: 500; letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-bar {
+    position: absolute; bottom: 0; left: 0;
+    height: 2px; width: 100%;
+    background: var(--dim); opacity: 0.7;
+  }
+  .stat-card[data-kind="registrations"] .stat-bar { background: var(--blue); }
+  .stat-card[data-kind="attended"]      .stat-bar { background: var(--green); }
+  .stat-card[data-kind="no_show"]       .stat-bar { background: var(--amber); }
+  .stat-card[data-kind="replay"]        .stat-bar { background: var(--purple); }
+  .stat-card[data-kind="unhandled"]     .stat-bar { background: var(--dim); }
+  .stat-card[data-kind="errors"]        .stat-bar { background: var(--red); }
+
+  /* ─── Buttons ─── */
+  .btn {
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 16px;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-weight: 500;
+  }
+  .btn:hover { background: var(--card-alt); border-color: var(--border-hi); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-primary {
+    background: var(--text); color: var(--bg);
+    border-color: var(--text);
+  }
+  .btn-primary:hover { background: #e4e4e7; border-color: #e4e4e7; }
+  .btn-danger {
+    color: var(--red);
+    border-color: rgba(239, 68, 68, 0.3);
+  }
+  .btn-danger:hover {
+    background: rgba(239, 68, 68, 0.08);
+    border-color: var(--red);
+  }
+  .btn-icon {
+    padding: 6px 10px;
+    font-size: 10px;
+  }
+
+  /* ─── Client cards ─── */
+  .client-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+  }
+  .client-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 20px 22px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .client-card:hover {
+    border-color: var(--border-hi);
+    background: var(--card-alt);
+    transform: translateY(-1px);
+  }
+  .client-header { display: flex; justify-content: space-between; align-items: flex-start; }
+  .client-name {
+    font-size: 15px; font-weight: 500;
+    letter-spacing: -0.01em;
+    margin-bottom: 4px;
+  }
+  .client-slug {
+    font-size: 10px; color: var(--dim);
+    letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .client-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .mini-stat { display: flex; flex-direction: column; gap: 2px; }
+  .mini-stat-value {
+    font-size: 16px; font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+  .mini-stat-label {
+    font-size: 9px; letter-spacing: 0.12em;
+    color: var(--dim); text-transform: uppercase;
+  }
+  .mini-stat.blue   .mini-stat-value { color: var(--blue); }
+  .mini-stat.green  .mini-stat-value { color: var(--green); }
+  .mini-stat.amber  .mini-stat-value { color: var(--amber); }
+  .mini-stat.purple .mini-stat-value { color: var(--purple); }
+  .mini-stat.red    .mini-stat-value { color: var(--red); }
+
+  .empty-state {
+    grid-column: 1 / -1;
+    padding: 64px 24px;
+    text-align: center;
+    background: var(--card);
+    border: 1px dashed var(--border-hi);
+  }
+  .empty-title {
+    font-size: 16px; font-weight: 500;
+    margin-bottom: 8px;
+  }
+  .empty-desc {
+    color: var(--muted);
+    font-size: 12px;
+    margin-bottom: 20px;
+  }
+
+  /* ─── Forms ─── */
+  .form-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 28px 32px;
+    max-width: 640px;
+  }
+  .form-section { display: flex; flex-direction: column; gap: 18px; }
+  .form-section + .form-section {
+    margin-top: 24px; padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+  .form-section-title {
+    font-size: 10px; letter-spacing: 0.18em;
+    color: var(--dim); text-transform: uppercase;
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  label {
+    font-size: 10px; letter-spacing: 0.12em;
+    color: var(--dim); text-transform: uppercase;
+  }
+  label .req { color: var(--red); margin-left: 2px; }
+  label .hint { color: var(--dim); text-transform: none; letter-spacing: 0; font-size: 11px; font-style: italic; margin-left: 6px; }
+  input[type="text"], input[type="password"], select, textarea {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 12px;
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.15s ease;
+  }
+  input[type="text"]:focus, input[type="password"]:focus, select:focus, textarea:focus {
+    border-color: var(--border-hi);
+  }
+  input::placeholder { color: var(--dim); }
+  select {
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%2352525b' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+  }
+
+  .form-actions {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+  .form-actions .left { display: flex; gap: 8px; }
+
+  .inline-error {
+    padding: 10px 14px;
+    background: rgba(239, 68, 68, 0.06);
+    border-left: 2px solid var(--red);
+    color: var(--red);
+    font-size: 11px;
+    margin-bottom: 8px;
+  }
+  .inline-success {
+    padding: 10px 14px;
+    background: rgba(34, 197, 94, 0.06);
+    border-left: 2px solid var(--green);
+    color: var(--green);
+    font-size: 11px;
+    margin-bottom: 8px;
+  }
+
+  /* ─── Copy URL ─── */
+  .copy-url {
+    display: flex;
+    background: var(--bg);
+    border: 1px solid var(--border);
+  }
+  .copy-url input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    padding: 10px 12px;
+    font-size: 11px;
+  }
+  .copy-url button {
+    background: transparent;
+    border: none;
+    border-left: 1px solid var(--border);
+    color: var(--muted);
+    padding: 0 14px;
+    cursor: pointer;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .copy-url button:hover { background: var(--card-alt); color: var(--text); }
+  .copy-url button.copied { color: var(--green); }
+
+  /* ─── Info strip (for client detail) ─── */
+  .info-strip {
+    display: grid;
+    grid-template-columns: 1fr 1fr 2fr auto;
+    gap: 20px;
+    padding: 18px 22px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    margin-bottom: 24px;
+    align-items: center;
+  }
+  .info-strip .actions { display: flex; gap: 8px; }
+  .info-item { display: flex; flex-direction: column; gap: 2px; }
+  .info-label { font-size: 10px; letter-spacing: 0.12em; color: var(--dim); text-transform: uppercase; }
+  .info-value { font-size: 12px; color: var(--text); word-break: break-all; }
+
+  /* ─── Event list (reused from before) ─── */
+  .events-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px;
+  }
+  .events-title {
+    font-size: 11px; letter-spacing: 0.15em;
+    color: var(--dim); text-transform: uppercase; font-weight: 500;
+  }
+  .controls { display: flex; gap: 4px; align-items: center; }
+  .filter-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 5px 10px;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .filter-btn:hover { color: var(--text); border-color: var(--border-hi); }
+  .filter-btn.active {
+    color: var(--text); border-color: var(--text);
+    background: var(--card-alt);
+  }
+
+  .event-list {
+    background: var(--card);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .event-empty {
+    padding: 48px 24px; text-align: center;
+    color: var(--dim); font-size: 12px;
+  }
+  .event { border-bottom: 1px solid var(--border); }
+  .event:last-child { border-bottom: none; }
+  .event:hover { background: var(--card-alt); }
+  .event-row {
+    display: grid;
+    grid-template-columns: 88px 110px 1fr 160px 160px 80px;
+    gap: 12px;
+    padding: 12px 20px;
+    align-items: center;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .event-time { color: var(--dim); font-variant-numeric: tabular-nums; }
+  .event-kind {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 10px; letter-spacing: 0.08em;
+    text-transform: uppercase; font-weight: 500;
+  }
+  .event-kind::before {
+    content: ''; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--dim);
+  }
+  .event-kind.registration::before { background: var(--blue); }
+  .event-kind.attended::before     { background: var(--green); }
+  .event-kind.no_show::before      { background: var(--amber); }
+  .event-kind.replay::before       { background: var(--purple); }
+  .event-kind.registration { color: var(--blue); }
+  .event-kind.attended     { color: var(--green); }
+  .event-kind.no_show      { color: var(--amber); }
+  .event-kind.replay       { color: var(--purple); }
+  .event-kind.unhandled    { color: var(--muted); }
+  .event-who { display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+  .event-name { color: var(--text); font-size: 12px; }
+  .event-email {
+    color: var(--dim); font-size: 11px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .event-client, .event-webinar {
+    color: var(--muted); font-size: 11px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .event-client { color: var(--blue); }
+  .event-status {
+    justify-self: end;
+    font-size: 10px; letter-spacing: 0.08em;
+    text-transform: uppercase; font-weight: 500;
+    padding: 3px 8px;
+  }
+  .event-status.ok    { color: var(--green); background: rgba(34, 197, 94, 0.08); }
+  .event-status.warn  { color: var(--amber); background: rgba(245, 158, 11, 0.08); }
+  .event-status.error { color: var(--red);   background: rgba(239, 68, 68, 0.08); }
+  .event-detail {
+    max-height: 0; overflow: hidden;
+    transition: max-height 0.25s ease;
+    background: var(--bg);
+    border-top: 1px solid transparent;
+  }
+  .event.expanded .event-detail {
+    max-height: 600px;
+    border-top-color: var(--border);
+  }
+  .event-detail-inner { padding: 16px 20px 20px; }
+  .event-detail pre {
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 12px 14px;
+    font-size: 11px; color: var(--muted);
+    overflow-x: auto;
+    white-space: pre-wrap; word-break: break-all;
+    line-height: 1.6;
+  }
+  .event-message {
+    color: var(--red); font-size: 11px;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    background: rgba(239, 68, 68, 0.06);
+    border-left: 2px solid var(--red);
+  }
+
+  /* ─── Toast ─── */
+  .toast-container {
+    position: fixed; bottom: 24px; right: 24px;
+    display: flex; flex-direction: column; gap: 8px;
+    z-index: 1000;
+  }
+  .toast {
+    padding: 12px 18px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    font-size: 12px;
+    animation: slideIn 0.2s ease-out;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+    min-width: 240px;
+  }
+  .toast.success { border-left: 3px solid var(--green); }
+  .toast.error   { border-left: 3px solid var(--red); }
+  .toast.info    { border-left: 3px solid var(--blue); }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(12px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  /* ─── Modal ─── */
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 100;
+  }
+  .modal-backdrop.show { display: flex; }
+  .modal {
+    background: var(--card);
+    border: 1px solid var(--border-hi);
+    padding: 24px 28px;
+    max-width: 440px;
+    width: 90%;
+  }
+  .modal-title { font-size: 15px; font-weight: 500; margin-bottom: 12px; }
+  .modal-body { color: var(--muted); font-size: 12px; margin-bottom: 20px; line-height: 1.6; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+  @media (max-width: 900px) {
+    .stat-grid { grid-template-columns: repeat(3, 1fr); }
+    .field-row { grid-template-columns: 1fr; }
+    .info-strip { grid-template-columns: 1fr; gap: 12px; }
+    .info-strip .actions { justify-self: flex-start; }
+    .event-row { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .event-client, .event-webinar, .event-status { display: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <nav>
+      <div class="brand" onclick="location.hash='#/'">
+        <span class="brand-name">Smmartly // Sync</span>
+        <h1 class="brand-title">Webinar<span class="arrow">→</span>GHL</h1>
+      </div>
+      <div class="status-cluster">
+        <div class="status-pill" id="status-pill">
+          <span class="dot"></span>
+          <span id="status-text">Connecting</span>
+        </div>
+      </div>
+    </nav>
+    <main id="view"></main>
+  </div>
+
+  <div class="toast-container" id="toasts"></div>
+  <div class="modal-backdrop" id="modal">
+    <div class="modal">
+      <div class="modal-title" id="modal-title"></div>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-actions">
+        <button class="btn" id="modal-cancel">Cancel</button>
+        <button class="btn btn-danger" id="modal-confirm">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ═══════════════════════════════════════════════════════════════
+  // State & helpers
+  // ═══════════════════════════════════════════════════════════════
+  let refreshTimer = null;
+  let expanded = new Set();
+  let wizardState = {
+    step: 1,
+    name: '', slug: '', ghlApiKey: '', ghlLocationId: '', webinarJamApiKey: '',
+    location: null, workflows: [],
+    wf: {
+      registration: { mode: 'select', id: '' },
+      attended:     { mode: 'select', id: '' },
+      noShow:       { mode: 'select', id: '' },
+      replay:       { mode: 'select', id: '' },
+    },
+  };
+  let editingSlug = null;
+  let clientDetailFilter = 'all';
+
+  const $ = s => document.querySelector(s);
+  const view = () => $('#view');
+
+  function esc(str) {
+    return String(str ?? '').replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[c]);
+  }
+
+  function fmtUptime(ms) {
+    const s = Math.floor(ms / 1000);
+    const d = Math.floor(s / 86400);
+    const h = Math.floor((s % 86400) / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    if (d > 0) return d + 'd ' + h + 'h';
+    if (h > 0) return h + 'h ' + m + 'm';
+    return m + 'm ' + (s % 60) + 's';
+  }
+
+  function fmtTime(iso) {
+    const d = new Date(iso);
+    return [d.getHours(), d.getMinutes(), d.getSeconds()]
+      .map(n => String(n).padStart(2, '0')).join(':');
+  }
+
+  function toast(msg, kind = 'info') {
+    const el = document.createElement('div');
+    el.className = 'toast ' + kind;
+    el.textContent = msg;
+    $('#toasts').appendChild(el);
+    setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s'; }, 2400);
+    setTimeout(() => el.remove(), 2800);
+  }
+
+  function confirm(title, body, danger = true) {
+    return new Promise(resolve => {
+      $('#modal-title').textContent = title;
+      $('#modal-body').textContent = body;
+      const confirmBtn = $('#modal-confirm');
+      confirmBtn.className = 'btn ' + (danger ? 'btn-danger' : 'btn-primary');
+      $('#modal').classList.add('show');
+      const done = v => {
+        $('#modal').classList.remove('show');
+        confirmBtn.onclick = null;
+        $('#modal-cancel').onclick = null;
+        resolve(v);
+      };
+      confirmBtn.onclick = () => done(true);
+      $('#modal-cancel').onclick = () => done(false);
+    });
+  }
+
+  async function api(method, path, body) {
+    const opts = { method, headers: {} };
+    if (body) {
+      opts.headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(body);
+    }
+    const res = await fetch(path, opts);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    return data;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // Status polling (for the top pill)
+  // ═══════════════════════════════════════════════════════════════
+  async function pollStatus() {
+    try {
+      const s = await api('GET', '/api/status');
+      $('#status-pill').classList.remove('offline');
+      $('#status-text').textContent = 'Running · ' + fmtUptime(s.uptimeMs);
+    } catch (e) {
+      $('#status-pill').classList.add('offline');
+      $('#status-text').textContent = 'Offline';
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // Routing
+  // ═══════════════════════════════════════════════════════════════
+  function route() {
+    if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+    const h = location.hash || '#/';
+    const m = h.match(/^#\/(new|clients\/([^/]+)(?:\/(edit))?)?$/);
+
+    if (h === '#/' || h === '#') return renderClientsList();
+    if (h === '#/new')           return renderAddClient();
+    const detailMatch = h.match(/^#\/clients\/([^/]+)$/);
+    if (detailMatch)             return renderClientDetail(detailMatch[1]);
+    const editMatch = h.match(/^#\/clients\/([^/]+)\/edit$/);
+    if (editMatch)               return renderEditClient(editMatch[1]);
+
+    return renderClientsList(); // fallback
+  }
+
+  window.addEventListener('hashchange', route);
+
+  // ═══════════════════════════════════════════════════════════════
+  // VIEW: Clients list
+  // ═══════════════════════════════════════════════════════════════
+  async function renderClientsList() {
+    view().innerHTML = `
+      <div class="view-header">
+        <div>
+          <div class="view-subtitle">Dashboard</div>
+          <h2 class="view-title">All Clients</h2>
+        </div>
+        <a href="#/new" class="btn btn-primary">+ Add Client</a>
+      </div>
+      <div id="aggregate-stats"></div>
+      <div class="client-grid" id="client-grid"></div>
+    `;
+
+    async function refresh() {
+      const [status, clients] = await Promise.all([
+        api('GET', '/api/status').catch(() => null),
+        api('GET', '/api/clients').catch(() => []),
+      ]);
+
+      // Aggregate stats
+      if (status) {
+        $('#aggregate-stats').innerHTML = `
+          <div class="stat-grid">
+            <div class="stat-card" data-kind="registrations"><div class="stat-label">Registrations</div><div class="stat-value">${status.stats.registrations}</div><div class="stat-bar"></div></div>
+            <div class="stat-card" data-kind="attended"><div class="stat-label">Attended</div><div class="stat-value">${status.stats.attended}</div><div class="stat-bar"></div></div>
+            <div class="stat-card" data-kind="no_show"><div class="stat-label">No Shows</div><div class="stat-value">${status.stats.noShows}</div><div class="stat-bar"></div></div>
+            <div class="stat-card" data-kind="replay"><div class="stat-label">Replays</div><div class="stat-value">${status.stats.replays}</div><div class="stat-bar"></div></div>
+            <div class="stat-card" data-kind="unhandled"><div class="stat-label">Unhandled</div><div class="stat-value">${status.stats.unhandled}</div><div class="stat-bar"></div></div>
+            <div class="stat-card" data-kind="errors"><div class="stat-label">Errors</div><div class="stat-value">${status.stats.errors}</div><div class="stat-bar"></div></div>
+          </div>
+        `;
+      }
+
+      // Clients grid
+      if (!clients || clients.length === 0) {
+        $('#client-grid').innerHTML = `
+          <div class="empty-state">
+            <div class="empty-title">No clients yet</div>
+            <div class="empty-desc">Add your first client to start syncing webinars into GHL.</div>
+            <a href="#/new" class="btn btn-primary">+ Add Your First Client</a>
+          </div>
+        `;
+        return;
+      }
+
+      $('#client-grid').innerHTML = clients.map(c => `
+        <a class="client-card" href="#/clients/${encodeURIComponent(c.slug)}">
+          <div class="client-header">
+            <div>
+              <div class="client-name">${esc(c.name)}</div>
+              <div class="client-slug">${esc(c.slug)}</div>
+            </div>
+          </div>
+          <div class="client-stats">
+            <div class="mini-stat blue"><div class="mini-stat-value">${c.stats.registrations}</div><div class="mini-stat-label">Reg</div></div>
+            <div class="mini-stat green"><div class="mini-stat-value">${c.stats.attended}</div><div class="mini-stat-label">Att</div></div>
+            <div class="mini-stat amber"><div class="mini-stat-value">${c.stats.noShows}</div><div class="mini-stat-label">No Show</div></div>
+            <div class="mini-stat purple"><div class="mini-stat-value">${c.stats.replays}</div><div class="mini-stat-label">Replay</div></div>
+            <div class="mini-stat"><div class="mini-stat-value">${c.stats.unhandled}</div><div class="mini-stat-label">Unh</div></div>
+            <div class="mini-stat red"><div class="mini-stat-value">${c.stats.errors}</div><div class="mini-stat-label">Err</div></div>
+          </div>
+        </a>
+      `).join('');
+    }
+
+    refresh();
+    refreshTimer = setInterval(refresh, 5000);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // VIEW: Add client (wizard)
+  // ═══════════════════════════════════════════════════════════════
+  function renderAddClient() {
+    wizardState = {
+      step: 1, name: '', slug: '', ghlApiKey: '', ghlLocationId: '', webinarJamApiKey: '',
+      location: null, workflows: [],
+      wf: {
+        registration: { mode: 'select', id: '' },
+        attended:     { mode: 'select', id: '' },
+        noShow:       { mode: 'select', id: '' },
+        replay:       { mode: 'select', id: '' },
+      },
+    };
+    editingSlug = null;
+    renderWizard();
+  }
+
+  function renderEditClient(slug) {
+    editingSlug = slug;
+    wizardState = {
+      step: 2, name: '', slug: '', ghlApiKey: '', ghlLocationId: '', webinarJamApiKey: '',
+      location: null, workflows: [],
+      wf: {
+        registration: { mode: 'select', id: '' },
+        attended:     { mode: 'select', id: '' },
+        noShow:       { mode: 'select', id: '' },
+        replay:       { mode: 'select', id: '' },
+      },
+    };
+    loadClientIntoWizard(slug);
+  }
+
+  async function loadClientIntoWizard(slug) {
+    view().innerHTML = `<div class="form-panel">Loading…</div>`;
+    try {
+      const c = await api('GET', '/api/clients/' + encodeURIComponent(slug));
+      wizardState.name             = c.name;
+      wizardState.slug             = c.slug;
+      wizardState.ghlLocationId    = c.ghlLocationId;
+      wizardState.ghlApiKey        = c.ghlApiKey;       // masked, server-side preserved unless changed
+      wizardState.webinarJamApiKey = c.webinarJamApiKey; // masked
+      wizardState.wf = {
+        registration: { mode: 'select', id: c.workflowRegistration || '' },
+        attended:     { mode: 'select', id: c.workflowAttended     || '' },
+        noShow:       { mode: 'select', id: c.workflowNoShow       || '' },
+        replay:       { mode: 'select', id: c.workflowReplay       || '' },
+      };
+      renderWizard();
+      toast('Loaded client — edit any field then save.', 'info');
+    } catch (e) {
+      toast('Failed to load client: ' + e.message, 'error');
+      location.hash = '#/';
+    }
+  }
+
+  function renderWizard() {
+    const s = wizardState;
+    const isEdit = !!editingSlug;
+
+    const step1 = `
+      <div class="form-section">
+        <div class="form-section-title">${isEdit ? 'Edit Client' : 'New Client — Step 1 of 2'}</div>
+        <div class="field">
+          <label>Name <span class="req">*</span></label>
+          <input type="text" id="f-name" placeholder="e.g. NCCI" value="${esc(s.name)}">
+        </div>
+        <div class="field">
+          <label>Slug <span class="hint">Used in webhook URL. Auto-generated from name.</span></label>
+          <input type="text" id="f-slug" placeholder="ncci" value="${esc(s.slug)}" ${isEdit ? 'readonly' : ''}>
+        </div>
+        <div class="field">
+          <label>GHL API Key <span class="req">*</span> ${isEdit ? '<span class="hint">Leave masked to keep existing.</span>' : ''}</label>
+          <input type="text" id="f-ghl-key" placeholder="pit-xxxxx" value="${esc(s.ghlApiKey)}">
+        </div>
+        <div class="field">
+          <label>GHL Location ID <span class="req">*</span></label>
+          <input type="text" id="f-ghl-loc" placeholder="TaSBofNlkPChbCiwfrLz" value="${esc(s.ghlLocationId)}" ${isEdit ? 'readonly' : ''}>
+        </div>
+        <div class="field">
+          <label>WebinarJam API Key <span class="hint">Optional — enables API enrichment (attendance times, session date).</span></label>
+          <input type="text" id="f-wj-key" placeholder="xxxx-xxxx-xxxx" value="${esc(s.webinarJamApiKey)}">
+        </div>
+      </div>
+    `;
+
+    const hasWorkflows = s.workflows && s.workflows.length > 0;
+
+    function wfField(key, label, hint, color) {
+      const entry = s.wf[key];
+      const isManual = entry.mode === 'manual';
+      const dot = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--${color});margin-right:6px;vertical-align:middle;opacity:0.85;"></span>`;
+      if (isManual) {
+        return `
+          <div class="field">
+            <label>${dot}${label} <span class="hint">${hint}</span></label>
+            <input type="text" id="f-wf-${key}" placeholder="Workflow ID" value="${esc(entry.id)}">
+            <div style="margin-top:5px;"><a href="#" class="wf-toggle" data-key="${key}" data-mode="select" style="font-size:11px;color:var(--blue);">← Pick from loaded list</a></div>
+          </div>`;
+      }
+      return `
+        <div class="field">
+          <label>${dot}${label} <span class="hint">${hint}</span></label>
+          <select id="f-wf-${key}" ${!hasWorkflows ? 'disabled' : ''}>
+            <option value="">— None / skip enrollment —</option>
+            ${(s.workflows || []).map(w =>
+              `<option value="${esc(w.id)}" ${w.id === entry.id ? 'selected' : ''}>${esc(w.name)}${w.status && w.status !== 'published' ? ' (' + esc(w.status) + ')' : ''}</option>`
+            ).join('')}
+          </select>
+          <div style="margin-top:5px;"><a href="#" class="wf-toggle" data-key="${key}" data-mode="manual" style="font-size:11px;color:var(--muted);">Enter ID manually instead →</a></div>
+        </div>`;
+    }
+
+    const step2 = `
+      <div class="form-section">
+        <div class="form-section-title">${isEdit ? 'Workflow Enrollment' : 'Step 2 of 2 — Workflow Enrollment'}</div>
+        ${s.location ? `<div class="inline-success">✓ Connected to <strong>${esc(s.location.name || s.location.id)}</strong> · ${s.workflows.length} workflow(s) loaded</div>` : ''}
+        ${!hasWorkflows && s.location ? `<div class="inline-error" style="margin-bottom:0;">No workflows found — you can still enter IDs manually below.</div>` : ''}
+        <p style="font-size:11px;color:var(--muted);line-height:1.7;">Select which GHL workflow to trigger for each event. All fields are optional — leave blank to skip enrollment for that event.</p>
+        ${wfField('registration', 'Registration',  'Contact enrolled when they register.',        'blue')}
+        ${wfField('attended',     'Attended Live',  'Contact enrolled when they watch the live.',  'green')}
+        ${wfField('noShow',       'No Show',        'Contact enrolled when they miss the live.',   'amber')}
+        ${wfField('replay',       'Watched Replay', 'Contact enrolled when they watch a replay.',  'purple')}
+      </div>
+    `;
+
+    view().innerHTML = `
+      <div class="crumbs">
+        <a href="#/">Clients</a>
+        <span class="crumb-sep">/</span>
+        <span>${isEdit ? esc(s.name) || 'Edit' : 'New Client'}</span>
+      </div>
+      <div class="form-panel">
+        <div id="form-error"></div>
+        ${s.step === 1 ? step1 : step1 + step2}
+        <div class="form-actions">
+          <div class="left">
+            ${s.step === 2 && !isEdit ? '<button class="btn" id="wiz-back">← Back</button>' : ''}
+            <a href="#/" class="btn">Cancel</a>
+          </div>
+          <div>
+            ${s.step === 1 && !isEdit
+              ? '<button class="btn btn-primary" id="wiz-next">Verify & Continue →</button>'
+              : '<button class="btn btn-primary" id="wiz-save">' + (isEdit ? 'Save Changes' : 'Save Client') + '</button>'}
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Bind inputs to state
+    const bind = (id, key) => {
+      const el = $('#' + id);
+      if (!el) return;
+      el.addEventListener('input', e => { wizardState[key] = e.target.value; });
+    };
+    bind('f-name', 'name');
+    bind('f-slug', 'slug');
+    bind('f-ghl-key', 'ghlApiKey');
+    bind('f-ghl-loc', 'ghlLocationId');
+    bind('f-wj-key', 'webinarJamApiKey');
+
+    // Auto-generate slug from name
+    const nameEl = $('#f-name');
+    const slugEl = $('#f-slug');
+    if (nameEl && slugEl && !isEdit) {
+      nameEl.addEventListener('input', e => {
+        if (!wizardState.slug || wizardState.slug === slugEl.dataset.auto) {
+          const newSlug = e.target.value.toLowerCase().trim()
+            .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+          wizardState.slug = newSlug;
+          slugEl.value = newSlug;
+          slugEl.dataset.auto = newSlug;
+        }
+      });
+    }
+
+    // Workflow selects / manual inputs
+    for (const key of ['registration', 'attended', 'noShow', 'replay']) {
+      const el = $(`#f-wf-${key}`);
+      if (el) {
+        const evt = el.tagName === 'SELECT' ? 'change' : 'input';
+        el.addEventListener(evt, e => { wizardState.wf[key].id = e.target.value; });
+      }
+    }
+    // Mode toggle links (dropdown ↔ manual)
+    document.querySelectorAll('.wf-toggle').forEach(link => {
+      link.addEventListener('click', e => {
+        e.preventDefault();
+        const key  = link.dataset.key;
+        const mode = link.dataset.mode;
+        wizardState.wf[key].mode = mode;
+        renderWizard();
+      });
+    });
+
+    // Actions
+    const backBtn = $('#wiz-back');
+    if (backBtn) backBtn.addEventListener('click', () => { wizardState.step = 1; renderWizard(); });
+
+    const nextBtn = $('#wiz-next');
+    if (nextBtn) nextBtn.addEventListener('click', verifyAndContinue);
+
+    const saveBtn = $('#wiz-save');
+    if (saveBtn) saveBtn.addEventListener('click', saveClient);
+  }
+
+  async function verifyAndContinue() {
+    $('#form-error').innerHTML = '';
+    const s = wizardState;
+    if (!s.name)          return showFormError('Name is required');
+    if (!s.ghlApiKey)     return showFormError('GHL API Key is required');
+    if (!s.ghlLocationId) return showFormError('GHL Location ID is required');
+
+    $('#wiz-next').disabled = true;
+    $('#wiz-next').textContent = 'Verifying…';
+
+    try {
+      const result = await api('POST', '/api/ghl/verify', {
+        apiKey: s.ghlApiKey,
+        locationId: s.ghlLocationId,
+      });
+      wizardState.location  = result.location;
+      wizardState.workflows = result.workflows || [];
+      wizardState.step = 2;
+      if (wizardState.workflows.length === 0) {
+        toast('Connected, but no workflows found. You can enter IDs manually.', 'info');
+      } else {
+        toast(`Connected — ${wizardState.workflows.length} workflow(s) loaded.`, 'success');
+      }
+      renderWizard();
+    } catch (e) {
+      showFormError('GHL verification failed: ' + e.message);
+      $('#wiz-next').disabled = false;
+      $('#wiz-next').textContent = 'Verify & Continue →';
+    }
+  }
+
+  function showFormError(msg) {
+    $('#form-error').innerHTML = `<div class="inline-error">${esc(msg)}</div>`;
+  }
+
+  async function saveClient() {
+    $('#form-error').innerHTML = '';
+    const s = wizardState;
+
+    const payload = {
+      name:                 s.name,
+      slug:                 s.slug,
+      ghlApiKey:            s.ghlApiKey,
+      ghlLocationId:        s.ghlLocationId,
+      workflowRegistration: s.wf.registration.id || null,
+      workflowAttended:     s.wf.attended.id     || null,
+      workflowNoShow:       s.wf.noShow.id        || null,
+      workflowReplay:       s.wf.replay.id        || null,
+      webinarJamApiKey:     s.webinarJamApiKey    || null,
+    };
+
+    $('#wiz-save').disabled = true;
+    $('#wiz-save').textContent = 'Saving…';
+
+    try {
+      let client;
+      if (editingSlug) {
+        client = await api('PUT', '/api/clients/' + encodeURIComponent(editingSlug), payload);
+        toast('Client updated.', 'success');
+      } else {
+        client = await api('POST', '/api/clients', payload);
+        toast('Client created.', 'success');
+      }
+      location.hash = '#/clients/' + encodeURIComponent(client.slug);
+    } catch (e) {
+      showFormError(e.message);
+      $('#wiz-save').disabled = false;
+      $('#wiz-save').textContent = editingSlug ? 'Save Changes' : 'Save Client';
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // VIEW: Client detail
+  // ═══════════════════════════════════════════════════════════════
+  async function renderClientDetail(slug) {
+    view().innerHTML = `<div class="form-panel">Loading…</div>`;
+    expanded.clear();
+
+    let client;
+    try {
+      client = await api('GET', '/api/clients/' + encodeURIComponent(slug));
+    } catch (e) {
+      view().innerHTML = `<div class="inline-error">Client not found.</div>`;
+      return;
+    }
+
+    const webhookUrl = location.origin + '/webhook/' + encodeURIComponent(client.slug) + '/' + client.webhookToken;
+
+    view().innerHTML = `
+      <div class="crumbs">
+        <a href="#/">Clients</a>
+        <span class="crumb-sep">/</span>
+        <span>${esc(client.name)}</span>
+      </div>
+
+      <div class="view-header">
+        <div>
+          <div class="view-subtitle">${esc(client.slug)}</div>
+          <h2 class="view-title">${esc(client.name)}</h2>
+        </div>
+        <div class="controls">
+          <a href="#/clients/${encodeURIComponent(client.slug)}/edit" class="btn">Edit</a>
+          <button class="btn" id="rotate-btn">Rotate Token</button>
+          <button class="btn btn-danger" id="delete-btn">Delete</button>
+        </div>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-card" data-kind="registrations"><div class="stat-label">Registrations</div><div class="stat-value">${client.stats.registrations}</div><div class="stat-bar"></div></div>
+        <div class="stat-card" data-kind="attended"><div class="stat-label">Attended</div><div class="stat-value">${client.stats.attended}</div><div class="stat-bar"></div></div>
+        <div class="stat-card" data-kind="no_show"><div class="stat-label">No Shows</div><div class="stat-value">${client.stats.noShows}</div><div class="stat-bar"></div></div>
+        <div class="stat-card" data-kind="replay"><div class="stat-label">Replays</div><div class="stat-value">${client.stats.replays}</div><div class="stat-bar"></div></div>
+        <div class="stat-card" data-kind="unhandled"><div class="stat-label">Unhandled</div><div class="stat-value">${client.stats.unhandled}</div><div class="stat-bar"></div></div>
+        <div class="stat-card" data-kind="errors"><div class="stat-label">Errors</div><div class="stat-value">${client.stats.errors}</div><div class="stat-bar"></div></div>
+      </div>
+
+      <div class="info-strip">
+        <div class="info-item"><div class="info-label">Location</div><div class="info-value">${esc(client.ghlLocationId)}</div></div>
+        <div class="info-item" style="line-height:1.9;">
+          <div class="info-label">Workflows</div>
+          <div class="info-value" style="font-size:11px;">
+            ${client.workflowRegistration ? `<span style="color:var(--blue);">●</span> Reg: <span style="color:var(--muted);">${esc(client.workflowRegistration)}</span><br>` : ''}
+            ${client.workflowAttended     ? `<span style="color:var(--green);">●</span> Att: <span style="color:var(--muted);">${esc(client.workflowAttended)}</span><br>` : ''}
+            ${client.workflowNoShow       ? `<span style="color:var(--amber);">●</span> No Show: <span style="color:var(--muted);">${esc(client.workflowNoShow)}</span><br>` : ''}
+            ${client.workflowReplay       ? `<span style="color:var(--purple);">●</span> Replay: <span style="color:var(--muted);">${esc(client.workflowReplay)}</span>` : ''}
+            ${!client.workflowRegistration && !client.workflowAttended && !client.workflowNoShow && !client.workflowReplay ? '<span style="color:var(--dim);">None configured</span>' : ''}
+          </div>
+        </div>
+        <div class="info-item" style="min-width:0;">
+          <div class="info-label">Webhook URL · paste into WebinarJam/EverWebinar integration rules</div>
+          <div class="copy-url" style="margin-top:6px;">
+            <input type="text" id="webhook-url-input" readonly value="${esc(webhookUrl)}">
+            <button id="copy-webhook-btn">Copy</button>
+          </div>
+        </div>
+        <div></div>
+      </div>
+
+      <div class="events-header">
+        <span class="events-title">Recent Events · ${esc(client.name)}</span>
+        <div class="controls">
+          <button class="filter-btn active" data-filter="all">All</button>
+          <button class="filter-btn" data-filter="registration">Register</button>
+          <button class="filter-btn" data-filter="attended">Attended</button>
+          <button class="filter-btn" data-filter="no_show">No Show</button>
+          <button class="filter-btn" data-filter="replay">Replay</button>
+          <button class="filter-btn" data-filter="unhandled">Unhandled</button>
+        </div>
+      </div>
+      <div class="event-list" id="event-list"><div class="event-empty">Loading events…</div></div>
+    `;
+
+    // Copy webhook URL
+    $('#copy-webhook-btn').addEventListener('click', () => {
+      const input = $('#webhook-url-input');
+      input.select();
+      navigator.clipboard.writeText(input.value).catch(() => document.execCommand('copy'));
+      const btn = $('#copy-webhook-btn');
+      btn.classList.add('copied');
+      btn.textContent = 'Copied';
+      setTimeout(() => { btn.classList.remove('copied'); btn.textContent = 'Copy'; }, 1500);
+    });
+
+    // Rotate token
+    $('#rotate-btn').addEventListener('click', async () => {
+      const ok = await confirm(
+        'Rotate webhook token?',
+        'The current webhook URL will stop working immediately. You\'ll need to update the URL in WebinarJam integration rules.',
+        true
+      );
+      if (!ok) return;
+      try {
+        await api('POST', '/api/clients/' + encodeURIComponent(client.slug) + '/rotate-token');
+        toast('Token rotated. Copy the new URL.', 'success');
+        renderClientDetail(slug);
+      } catch (e) { toast('Rotate failed: ' + e.message, 'error'); }
+    });
+
+    // Delete
+    $('#delete-btn').addEventListener('click', async () => {
+      const ok = await confirm(
+        'Delete this client?',
+        `This removes "${client.name}" from the app. Webhooks to this client's URL will stop working. Your GHL data stays intact.`,
+        true
+      );
+      if (!ok) return;
+      try {
+        await api('DELETE', '/api/clients/' + encodeURIComponent(client.slug));
+        toast('Client deleted.', 'success');
+        location.hash = '#/';
+      } catch (e) { toast('Delete failed: ' + e.message, 'error'); }
+    });
+
+    // Filter buttons
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        clientDetailFilter = btn.dataset.filter;
+        refreshEvents();
+      });
+    });
+
+    async function refreshEvents() {
+      try {
+        const params = new URLSearchParams({ clientSlug: slug });
+        if (clientDetailFilter !== 'all') params.set('filter', clientDetailFilter);
+        const evts = await api('GET', '/api/events?' + params.toString());
+        renderEventList(evts);
+      } catch (e) { /* silent */ }
+    }
+    refreshEvents();
+    refreshTimer = setInterval(refreshEvents, 3000);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // Event list renderer
+  // ═══════════════════════════════════════════════════════════════
+  function renderEventList(evts) {
+    const list = $('#event-list');
+    if (!list) return;
+    if (!evts || evts.length === 0) {
+      list.innerHTML = '<div class="event-empty">No events yet. Fire a webhook from WebinarJam to test.</div>';
+      return;
+    }
+    list.innerHTML = evts.map(e => {
+      const kindClass = (e.kind || 'unknown').toLowerCase();
+      const statusClass = e.status || 'ok';
+      const isExpanded = expanded.has(e.id);
+      const payloadStr = JSON.stringify(e.payload || {}, null, 2);
+      return `
+        <div class="event ${isExpanded ? 'expanded' : ''}" data-id="${e.id}">
+          <div class="event-row">
+            <div class="event-time">${fmtTime(e.timestamp)}</div>
+            <div class="event-kind ${kindClass}">${(e.kind || 'unknown').replace('_', ' ')}</div>
+            <div class="event-who">
+              <div class="event-name">${esc(e.name)}</div>
+              <div class="event-email">${esc(e.email)}</div>
+            </div>
+            <div class="event-client">${esc(e.clientName || e.clientSlug || '')}</div>
+            <div class="event-webinar">${esc(e.webinarName || '—')}</div>
+            <div class="event-status ${statusClass}">${statusClass}</div>
+          </div>
+          <div class="event-detail">
+            <div class="event-detail-inner">
+              ${e.message ? `<div class="event-message">${esc(e.message)}</div>` : ''}
+              <pre>trigger: ${esc(e.trigger || '')}
+client : ${esc(e.clientSlug)}
+
+${esc(payloadStr)}</pre>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    list.querySelectorAll('.event-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const evtEl = row.parentElement;
+        const id = evtEl.dataset.id;
+        if (expanded.has(id)) { expanded.delete(id); evtEl.classList.remove('expanded'); }
+        else                  { expanded.add(id);    evtEl.classList.add('expanded'); }
+      });
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // Init
+  // ═══════════════════════════════════════════════════════════════
+  pollStatus();
+  setInterval(pollStatus, 10000);
+  route();
+})();
+</script>
+</body>
+</html>
