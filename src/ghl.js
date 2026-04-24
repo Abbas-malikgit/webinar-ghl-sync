@@ -11,10 +11,11 @@ function headers(apiKey) {
   };
 }
 
-// GHL's workflow endpoint rejects the "Z" suffix on ISO timestamps
-// and demands an explicit +HH:MM offset. Same instant, fussier format.
+// GHL's workflow endpoint rejects the "Z" suffix AND milliseconds.
+// It wants the exact format from its own error message: 2021-06-23T03:30:00+00:00.
+// Same instant, no fractional seconds, explicit +HH:MM offset.
 function nowIsoWithOffset() {
-  return new Date().toISOString().replace('Z', '+00:00');
+  return new Date().toISOString().replace(/\.\d{3}Z$/, '+00:00');
 }
 
 // ─── Field helpers ───────────────────────────────────────────
