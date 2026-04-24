@@ -454,9 +454,38 @@
     text-transform: uppercase; font-weight: 500;
     padding: 3px 8px;
   }
-  .event-status.ok    { color: var(--green); background: rgba(34, 197, 94, 0.08); }
-  .event-status.warn  { color: var(--amber); background: rgba(245, 158, 11, 0.08); }
-  .event-status.error { color: var(--red);   background: rgba(239, 68, 68, 0.08); }
+  .event-status.ok       { color: var(--green); background: rgba(34, 197, 94, 0.08); }
+  .event-status.warn     { color: var(--amber); background: rgba(245, 158, 11, 0.08); }
+  .event-status.error    { color: var(--red);   background: rgba(239, 68, 68, 0.08); }
+  .event-status.queued   { color: var(--blue);  background: rgba(59, 130, 246, 0.08); }
+  .event-status.retrying { color: var(--amber); background: rgba(245, 158, 11, 0.10); }
+
+  /* Queue depth + Export + Retry */
+  .queue-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--muted); padding: 4px 10px;
+    border: 1px solid var(--border);
+  }
+  .queue-pill .q-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--green);
+  }
+  .queue-pill.active .q-dot { background: var(--amber); }
+  .btn-subtle {
+    background: transparent; border: 1px solid var(--border);
+    color: var(--muted); padding: 5px 10px;
+    font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+    cursor: pointer; transition: all 0.15s ease;
+  }
+  .btn-subtle:hover { color: var(--text); border-color: var(--border-hi); }
+  .event-retry-btn {
+    background: transparent; border: 1px solid var(--amber);
+    color: var(--amber); padding: 4px 10px;
+    font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+    cursor: pointer; margin-top: 8px;
+  }
+  .event-retry-btn:hover { background: rgba(245, 158, 11, 0.08); }
   .event-detail {
     max-height: 0; overflow: hidden;
     transition: max-height 0.25s ease;
@@ -1105,12 +1134,15 @@
       <div class="events-header">
         <span class="events-title">Recent Events · ${esc(client.name)}</span>
         <div class="controls">
-          <button class="filter-btn active" data-filter="all">All</button>
-          <button class="filter-btn" data-filter="registration">Register</button>
-          <button class="filter-btn" data-filter="attended">Attended</button>
-          <button class="filter-btn" data-filter="no_show">No Show</button>
-          <button class="filter-btn" data-filter="replay">Replay</button>
-          <button class="filter-btn" data-filter="unhandled">Unhandled</button>
+          <span class="queue-pill" id="queue-pill" title="Jobs currently in the retry queue for this client"><span class="q-dot"></span><span id="queue-pill-text">queue 0</span></span>
+          <button class="filter-btn active" data-filter="all" data-status="">All</button>
+          <button class="filter-btn" data-filter="registration" data-status="">Register</button>
+          <button class="filter-btn" data-filter="attended" data-status="">Attended</button>
+          <button class="filter-btn" data-filter="no_show" data-status="">No Show</button>
+          <button class="filter-btn" data-filter="replay" data-status="">Replay</button>
+          <button class="filter-btn" data-filter="unhandled" data-status="">Unhandled</button>
+          <button class="filter-btn" data-filter="all" data-status="error" style="color:var(--red);border-color:rgba(239,68,68,0.3);">Failed</button>
+          <button class="btn-subtle" id="export-csv-btn" title="Download all events for this client as CSV">Export CSV</button>
         </div>
       </div>
       <div class="event-list" id="event-list"><div class="event-empty">Loading events…</div></div>
@@ -1157,22 +1189,44 @@
       } catch (e) { toast('Delete failed: ' + e.message, 'error'); }
     });
 
-    // Filter buttons
+    // Filter buttons (kind + status)
+    let clientDetailStatus = '';
     document.querySelectorAll('.filter-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         clientDetailFilter = btn.dataset.filter;
+        clientDetailStatus = btn.dataset.status || '';
         refreshEvents();
       });
+    });
+
+    // Export CSV for this client
+    $('#export-csv-btn').addEventListener('click', () => {
+      const url = '/api/events/export?clientSlug=' + encodeURIComponent(slug);
+      window.location.href = url;
     });
 
     async function refreshEvents() {
       try {
         const params = new URLSearchParams({ clientSlug: slug });
         if (clientDetailFilter !== 'all') params.set('filter', clientDetailFilter);
+        if (clientDetailStatus)           params.set('status', clientDetailStatus);
         const evts = await api('GET', '/api/events?' + params.toString());
         renderEventList(evts);
+      } catch (e) { /* silent */ }
+
+      // Update queue pill for this client
+      try {
+        const q = await api('GET', '/api/queue');
+        const count = (q.bySlug && q.bySlug[slug]) || 0;
+        const pill = $('#queue-pill');
+        const txt  = $('#queue-pill-text');
+        if (pill && txt) {
+          txt.textContent = 'queue ' + count;
+          if (count > 0) pill.classList.add('active');
+          else           pill.classList.remove('active');
+        }
       } catch (e) { /* silent */ }
     }
     refreshEvents();
@@ -1194,6 +1248,7 @@
       const statusClass = e.status || 'ok';
       const isExpanded = expanded.has(e.id);
       const payloadStr = JSON.stringify(e.payload || {}, null, 2);
+      const attemptsLabel = e.attempts && e.attempts > 1 ? ` · try ${e.attempts}` : '';
       return `
         <div class="event ${isExpanded ? 'expanded' : ''}" data-id="${e.id}">
           <div class="event-row">
@@ -1205,14 +1260,16 @@
             </div>
             <div class="event-client">${esc(e.clientName || e.clientSlug || '')}</div>
             <div class="event-webinar">${esc(e.webinarName || '—')}</div>
-            <div class="event-status ${statusClass}">${statusClass}</div>
+            <div class="event-status ${statusClass}">${statusClass}${attemptsLabel}</div>
           </div>
           <div class="event-detail">
             <div class="event-detail-inner">
               ${e.message ? `<div class="event-message">${esc(e.message)}</div>` : ''}
-              <pre>trigger: ${esc(e.trigger || '')}
-client : ${esc(e.clientSlug)}
-
+              ${e.status === 'error' ? `<button class="event-retry-btn" data-retry-id="${e.id}">↻ Retry now</button>` : ''}
+              <pre>trigger : ${esc(e.trigger || '')}
+client  : ${esc(e.clientSlug)}
+attempts: ${e.attempts ?? 0}
+${e.retryOf ? 'retryOf : ' + esc(e.retryOf) + '\n' : ''}
 ${esc(payloadStr)}</pre>
             </div>
           </div>
@@ -1226,6 +1283,23 @@ ${esc(payloadStr)}</pre>
         const id = evtEl.dataset.id;
         if (expanded.has(id)) { expanded.delete(id); evtEl.classList.remove('expanded'); }
         else                  { expanded.add(id);    evtEl.classList.add('expanded'); }
+      });
+    });
+
+    list.querySelectorAll('.event-retry-btn').forEach(btn => {
+      btn.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        const id = btn.dataset.retryId;
+        btn.disabled = true;
+        btn.textContent = 'Re-queuing…';
+        try {
+          await api('POST', '/api/events/' + encodeURIComponent(id) + '/retry');
+          toast('Event re-queued. It will retry within a few seconds.', 'success');
+        } catch (e) {
+          toast('Retry failed: ' + e.message, 'error');
+          btn.disabled = false;
+          btn.textContent = '↻ Retry now';
+        }
       });
     });
   }

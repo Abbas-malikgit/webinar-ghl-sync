@@ -1,7 +1,7 @@
 import fetch from 'node-fetch';
 import { config, FIELDS } from './config.js';
 
-const BASE = config.ghl.baseUrl;
+const BASE = process.env.GHL_BASE_URL || config.ghl.baseUrl;
 
 function headers(apiKey) {
   return {
@@ -14,7 +14,7 @@ function headers(apiKey) {
 // GHL's workflow endpoint rejects the "Z" suffix on ISO timestamps
 // and demands an explicit +HH:MM offset. Same instant, fussier format.
 function nowIsoWithOffset() {
-  return new Date().toISOString().replace(/\.\d{3}Z$/, '+00:00');
+  return new Date().toISOString().replace('Z', '+00:00');
 }
 
 // ─── Field helpers ───────────────────────────────────────────
@@ -93,24 +93,21 @@ export async function listWorkflows(apiKey, locationId) {
 export async function enrollContactInWorkflow(client, contactId, workflowId) {
   if (!workflowId) return null;
 
-  const eventStartTime = nowIsoWithOffset();
-  console.log(`   ↪ enroll payload: eventStartTime="${eventStartTime}"`);
-
   const res = await fetch(`${BASE}/contacts/${contactId}/workflow/${workflowId}`, {
     method: 'POST',
     headers: headers(client.ghlApiKey),
-    body: JSON.stringify({ eventStartTime }),
+    body: JSON.stringify({ eventStartTime: nowIsoWithOffset() }),
   });
 
-  const raw = await res.text();
-  console.log(`   ↪ GHL responded ${res.status}: ${raw}`);
-
+  // GHL returns 200, 201, or 204 on success — use res.ok to accept any 2xx
   if (res.ok) {
-  console.log(`✅ Enrolled contact ${contactId} in workflow ${workflowId}`);
-  return true;
- }
+    console.log(`✅ Enrolled contact ${contactId} in workflow ${workflowId}`);
+    return true;
+  }
 
-  throw new Error(`GHL enrollWorkflow failed (${res.status}): ${raw}`);
+  let data = {};
+  try { data = await res.json(); } catch {}
+  throw new Error(`GHL enrollWorkflow failed (${res.status}): ${JSON.stringify(data)}`);
 }
 
 // ─── Contacts ────────────────────────────────────────────────
