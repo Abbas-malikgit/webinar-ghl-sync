@@ -154,6 +154,7 @@ export async function fetchRegistrantData(apiKey, webinarName, email) {
 export function normalizePayload(raw) {
   const lead    = raw.lead    || {};
   const webinar = raw.webinar || {};
+  const links   = raw.links   || {};   // WebinarJam ships per-registrant tokenized URLs here
 
   const firstName = lead.first_name || raw.first_name || '';
   const lastName  = lead.last_name  || raw.last_name  || '';
@@ -181,6 +182,11 @@ export function normalizePayload(raw) {
     watchPercentage: undefined,
     replayWatched: undefined,
     noShow:        undefined,
+    // Per-registrant join URLs — WebinarJam puts these directly in the webhook's
+    // `links` object, not in the API. Empty string when not provided so the field
+    // doesn't get set to undefined and skipped in buildCustomFields.
+    liveRoomLink:   links.live_room   || links.live   || '',
+    replayRoomLink: links.replay_room || links.replay || '',
   };
 }
 
