@@ -116,7 +116,9 @@ export function enqueue({ client, payload, kind, trigger, email, name }) {
 }
 
 // ─── Public: retry a previously-failed event ─────────────────
-// Called from UI. Re-enqueues with attempts reset.
+// Reuses the SAME event id so the dashboard shows one row per
+// registration. The attempts counter on that row reflects the
+// total number of tries across all retry cycles.
 export async function retryEvent(eventId) {
   const all = await events.readAllEvents();
   const evt = all.find(e => e.id === eventId);
@@ -126,9 +128,19 @@ export async function retryEvent(eventId) {
   const client = store.getClient(evt.clientSlug);
   if (!client) return { ok: false, error: 'client no longer exists' };
 
-  // New job with a fresh id — this preserves the failed event in history
+  // Guard against double-clicks: if there's already a job in the queue
+  // with this id, the previous retry is still working — don't add another.
+  if (queue.some(j => j.id === evt.id)) {
+    return { ok: false, error: 'retry already in progress' };
+  }
+
+  const priorAttempts = evt.attempts || 0;
+
+  // Same event id — reuses the existing dashboard row.
+  // attempts continues counting from where the original failure left off
+  // (so retries show "try 4", "try 5", etc., not resetting to "try 1").
   const job = {
-    id:          randomUUID(),
+    id:          evt.id,                              // ← same id, same row
     clientSlug:  evt.clientSlug,
     clientName:  evt.clientName,
     kind:        evt.kind,
@@ -138,29 +150,20 @@ export async function retryEvent(eventId) {
     webinarName: evt.webinarName,
     webinarId:   evt.webinarId,
     payload:     evt.payload,
-    attempts:    0,
+    attempts:    priorAttempts,                       // continue counting
+    maxAttempts: priorAttempts + MAX_ATTEMPTS,        // allow another 3 tries per retry click
     nextAttempt: Date.now(),
     enqueuedAt:  new Date().toISOString(),
     lastError:   null,
-    retryOf:     evt.id,  // trace back to the original
   };
   queue.push(job);
-  events.appendEvent({
-    id: job.id,
-    clientSlug: job.clientSlug,
-    clientName: job.clientName,
-    kind:       job.kind,
-    trigger:    job.trigger,
-    email:      job.email,
-    name:       job.name,
-    webinarName: job.webinarName,
-    webinarId:   job.webinarId,
-    status:     'queued',
-    message:    `Retry of ${evt.id.slice(0, 8)}`,
-    attempts:   0,
-    payload:    job.payload,
-    retryOf:    evt.id,
+
+  // Flip the existing row back to "queued" so dashboard reflects re-enqueue
+  await events.updateEvent(evt.id, {
+    status:  'queued',
+    message: `Manual retry requested (was failed after ${priorAttempts} attempts)`,
   });
+
   saveQueue();
   return { ok: true, jobId: job.id };
 }
@@ -229,18 +232,22 @@ async function runJob(job) {
     const errMsg = err?.message || String(err);
     console.error(`❌ [${job.clientSlug}] job ${job.id.slice(0,8)} attempt ${attempts} failed:`, errMsg);
 
-    if (attempts >= MAX_ATTEMPTS) {
+    // Each retry click extends the cap by MAX_ATTEMPTS; first run uses MAX_ATTEMPTS itself.
+    const cap = job.maxAttempts || MAX_ATTEMPTS;
+
+    if (attempts >= cap) {
       // Give up — leave event in history with status=error
       queue = queue.filter(j => j.id !== job.id);
       saveQueue();
       await events.updateEvent(job.id, {
         status:   'error',
         attempts,
-        message:  `Failed after ${MAX_ATTEMPTS} attempts. Last error: ${errMsg}`,
+        message:  `Failed after ${attempts} attempts. Last error: ${errMsg}`,
       });
     } else {
-      // Schedule retry with backoff
-      const delay = BACKOFF_MS[Math.min(attempts - 1, BACKOFF_MS.length - 1)];
+      // Schedule retry with backoff. Use position within current burst, not absolute attempt number.
+      const burstAttempt = attempts - (cap - MAX_ATTEMPTS);  // 1, 2, 3 within this batch
+      const delay = BACKOFF_MS[Math.min(burstAttempt - 1, BACKOFF_MS.length - 1)];
       const j = queue.find(x => x.id === job.id);
       if (j) {
         j.attempts    = attempts;

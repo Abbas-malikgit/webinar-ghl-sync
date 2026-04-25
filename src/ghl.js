@@ -65,6 +65,10 @@ function buildCustomFields(data) {
   if (data.noShow !== undefined)
     push(field(FIELDS.webinarNoShow, data.noShow));
 
+  // Live + replay join links — only present when API enrichment runs.
+  if (data.liveRoomLink)   push(field(FIELDS.webinarLiveRoomLink,   data.liveRoomLink));
+  if (data.replayRoomLink) push(field(FIELDS.webinarReplayRoomLink, data.replayRoomLink));
+
   return fields.filter(Boolean);
 }
 

@@ -13,6 +13,8 @@ export async function handleRegistration(client, raw) {
     data.scheduledDate = reg.scheduledDate;
     data.scheduledTime = reg.scheduledTime;
     if (reg.registeredAt) data.registeredAt = reg.registeredAt;
+    if (reg.liveRoomLink)   data.liveRoomLink   = reg.liveRoomLink;
+    if (reg.replayRoomLink) data.replayRoomLink = reg.replayRoomLink;
   } else {
     const now = new Date();
     data.scheduledDate = now.toISOString().split('T')[0];

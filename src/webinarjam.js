@@ -137,6 +137,11 @@ export async function fetchRegistrantData(apiKey, webinarName, email) {
       utmSource:   reg.utm_source   || '',
       utmMedium:   reg.utm_medium   || '',
       utmCampaign: reg.utm_campaign || '',
+      // Per-registrant join URLs (these are tokenized and unique per contact).
+      // WebinarJam's /registrants response field names vary between WJ and EW;
+      // we accept either pattern and fall back to empty.
+      liveRoomLink:   reg.live_room_url   || reg.live_url   || reg.url_live   || reg.live_link   || '',
+      replayRoomLink: reg.replay_room_url || reg.replay_url || reg.url_replay || reg.replay_link || '',
     };
 
   } catch (err) {

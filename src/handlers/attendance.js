@@ -13,6 +13,8 @@ export async function handleAttendance(client, raw) {
     data.attended      = reg.attendedLive === 1;
     data.timeWatched   = reg.timeWatchedMins;
     data.replayWatched = reg.attendedReplay === 1;
+    if (reg.liveRoomLink)   data.liveRoomLink   = reg.liveRoomLink;
+    if (reg.replayRoomLink) data.replayRoomLink = reg.replayRoomLink;
   } else {
     data.attended    = true;
     data.timeWatched = undefined;

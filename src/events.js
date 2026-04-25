@@ -144,17 +144,109 @@ function csvEscape(v) {
   if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
 }
+
+// Pull a value from the raw webhook payload using a dotted path.
+// Tries lead.* first, then top-level, then webinar.*.
+function pullPayload(payload, path) {
+  if (!payload) return '';
+  // Direct path (e.g. "lead.first_name", "webinar.id")
+  const parts = path.split('.');
+  let cur = payload;
+  for (const p of parts) {
+    if (cur && typeof cur === 'object' && p in cur) cur = cur[p];
+    else return '';
+  }
+  return cur ?? '';
+}
+
 export async function exportCsv({ clientSlug } = {}) {
   const { rows } = await queryEvents({ clientSlug, limit: 1_000_000, offset: 0 });
+
+  // Column groups:
+  //  1. Event metadata (when, what, status)
+  //  2. Webhook lead data — every field WebinarJam sends
+  //  3. Webhook webinar data
+  //  4. API enrichment placeholders (filled when WebinarJam API key is set)
   const headers = [
+    // Event metadata
     'timestamp', 'clientSlug', 'clientName', 'kind', 'trigger',
-    'email', 'name', 'webinarName', 'webinarId',
     'status', 'attempts', 'message',
+
+    // Lead data (from webhook payload.lead.*)
+    'first_name', 'last_name', 'email',
+    'phone_country_code', 'phone_number',
+    'ip_address', 'country', 'timezone', 'language',
+
+    // Webinar data (from webhook payload.webinar.*)
+    'webinar_id', 'webinar_name', 'webinar_type', 'webinar_url',
+    'schedule_id', 'schedule_date', 'schedule_time',
+
+    // Source / attribution (sometimes in payload, otherwise from API)
+    'source', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
+
+    // API enrichment fields (empty until WebinarJam API key is added per-client)
+    'api_attended_live', 'api_time_watched_mins',
+    'api_attended_replay', 'api_time_replay_mins',
+    'api_date_live', 'api_date_replay', 'api_entered_live', 'api_signup_date',
   ];
+
   const lines = [headers.join(',')];
+
   for (const e of rows) {
-    lines.push(headers.map(h => csvEscape(e[h])).join(','));
+    const p = e.payload || {};
+    const row = {
+      // Event metadata
+      timestamp:   e.timestamp,
+      clientSlug:  e.clientSlug,
+      clientName:  e.clientName,
+      kind:        e.kind,
+      trigger:     e.trigger,
+      status:      e.status,
+      attempts:    e.attempts,
+      message:     e.message,
+
+      // Lead data — try lead.* first, fall back to top-level
+      first_name:         pullPayload(p, 'lead.first_name')         || pullPayload(p, 'first_name'),
+      last_name:          pullPayload(p, 'lead.last_name')          || pullPayload(p, 'last_name'),
+      email:              pullPayload(p, 'lead.email')              || pullPayload(p, 'email') || e.email,
+      phone_country_code: pullPayload(p, 'lead.phone_country_code'),
+      phone_number:       pullPayload(p, 'lead.phone_number')       || pullPayload(p, 'phone'),
+      ip_address:         pullPayload(p, 'lead.ip_address')         || pullPayload(p, 'ip'),
+      country:            pullPayload(p, 'lead.country'),
+      timezone:           pullPayload(p, 'lead.timezone')           || pullPayload(p, 'lead.time_zone'),
+      language:           pullPayload(p, 'lead.language'),
+
+      // Webinar data
+      webinar_id:    pullPayload(p, 'webinar.id')         || pullPayload(p, 'webinar_id') || e.webinarId,
+      webinar_name:  pullPayload(p, 'webinar.name')       || pullPayload(p, 'webinar_name') || e.webinarName,
+      webinar_type:  pullPayload(p, 'webinar.type'),
+      webinar_url:   pullPayload(p, 'webinar.url')        || pullPayload(p, 'webinar.live_room_url'),
+      schedule_id:   pullPayload(p, 'webinar.schedule_id')|| pullPayload(p, 'schedule_id'),
+      schedule_date: pullPayload(p, 'webinar.date')       || pullPayload(p, 'webinar.schedule_date'),
+      schedule_time: pullPayload(p, 'webinar.time')       || pullPayload(p, 'webinar.schedule_time'),
+
+      // Source / attribution
+      source:       pullPayload(p, 'source')       || 'WebinarJam',
+      utm_source:   pullPayload(p, 'utm_source')   || pullPayload(p, 'lead.utm_source'),
+      utm_medium:   pullPayload(p, 'utm_medium')   || pullPayload(p, 'lead.utm_medium'),
+      utm_campaign: pullPayload(p, 'utm_campaign') || pullPayload(p, 'lead.utm_campaign'),
+      utm_content:  pullPayload(p, 'utm_content')  || pullPayload(p, 'lead.utm_content'),
+      utm_term:     pullPayload(p, 'utm_term')     || pullPayload(p, 'lead.utm_term'),
+
+      // API enrichment — only present when api enrichment ran successfully
+      api_attended_live:    e.apiAttendedLive,
+      api_time_watched_mins: e.apiTimeWatchedMins,
+      api_attended_replay:  e.apiAttendedReplay,
+      api_time_replay_mins: e.apiTimeReplayMins,
+      api_date_live:        e.apiDateLive,
+      api_date_replay:      e.apiDateReplay,
+      api_entered_live:     e.apiEnteredLive,
+      api_signup_date:      e.apiSignupDate,
+    };
+
+    lines.push(headers.map(h => csvEscape(row[h])).join(','));
   }
+
   return lines.join('\n') + '\n';
 }
 

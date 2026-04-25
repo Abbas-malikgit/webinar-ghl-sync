@@ -19,7 +19,9 @@ export const config = {
 
 // ─── GHL Custom Field Keys ────────────────────────────────────
 // Shared across all clients — the field keys must exist in each
-// client's GHL sub-account (copy the same field set per client).
+// client's GHL sub-account. You must create these manually for now
+// (Settings → Custom Fields in each sub-account). See the included
+// FIELDS-SETUP.md for the full list and types.
 export const FIELDS = {
   webinarName:              'webinar_name',
   webinarId:                'webinar_id',
@@ -33,7 +35,11 @@ export const FIELDS = {
   watchPercentage:          'watch_percentage',
   replayWatched:            'replay_watched',
   webinarNoShow:            'webinar_no_show',
+  webinarLiveRoomLink:      'webinar_live_room_link',
+  webinarReplayRoomLink:    'webinar_replay_room_link',
 
+  // Consultation fields — defined for downstream use by GHL workflows.
+  // Not auto-written by the sync app.
   consultationBookedDate:   'consultation_booked_date',
   consultationDate:         'consultation_date',
   consultationPaid:         'consultation_paid',
