@@ -10,6 +10,7 @@ export async function handleRegistration(client, raw) {
   const reg = await fetchRegistrantData(client.webinarJamApiKey, data.webinarName, data.email);
 
   if (reg) {
+    if (reg.platform)       data.webinarType = reg.platform;   // upgrade "Unknown" → "WebinarJam"|"EverWebinar"
     data.scheduledDate = reg.scheduledDate;
     data.scheduledTime = reg.scheduledTime;
     if (reg.registeredAt) data.registeredAt = reg.registeredAt;

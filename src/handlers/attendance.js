@@ -10,6 +10,7 @@ export async function handleAttendance(client, raw) {
   const reg = await fetchRegistrantData(client.webinarJamApiKey, data.webinarName, data.email);
 
   if (reg) {
+    if (reg.platform)       data.webinarType   = reg.platform;
     data.attended      = reg.attendedLive === 1;
     data.timeWatched   = reg.timeWatchedMins;
     data.replayWatched = reg.attendedReplay === 1;

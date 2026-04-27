@@ -4,10 +4,12 @@ const WJ_BASE = 'https://api.webinarjam.com/webinarjam';
 const EW_BASE = 'https://api.webinarjam.com/everwebinar';
 
 // ─── Per-client cache of resolved webinar IDs ────────────────
-// Key: `${apiKey}::${webinarName}` → { base, apiId }
+// Key: `${apiKey}::${webinarName}` → { base, apiId, platform }
 const webinarIdCache = new Map();
 
 // ─── Find the API webinar_id by name — tries both WJ + EW ────
+// Returns { base, apiId, platform: 'WebinarJam' | 'EverWebinar' } so callers
+// can tell which platform owns the webinar.
 async function getApiWebinarId(apiKey, webinarName) {
   const cacheKey = `${apiKey}::${webinarName}`;
   if (webinarIdCache.has(cacheKey)) return webinarIdCache.get(cacheKey);
@@ -25,9 +27,10 @@ async function getApiWebinarId(apiKey, webinarName) {
       const webinars = data?.webinars || [];
       const match = webinars.find(w => w.name === webinarName);
       if (match) {
-        const result = { base, apiId: match.webinar_id };
+        const platform = base === EW_BASE ? 'EverWebinar' : 'WebinarJam';
+        const result = { base, apiId: match.webinar_id, platform };
         webinarIdCache.set(cacheKey, result);
-        console.log(`   Resolved ${base.endsWith('everwebinar') ? 'EW' : 'WJ'} webinar_id: ${match.webinar_id} for "${webinarName}"`);
+        console.log(`   Resolved ${platform} webinar_id: ${match.webinar_id} for "${webinarName}"`);
         return result;
       }
     } catch (e) {
@@ -49,7 +52,7 @@ export async function fetchRegistrantData(apiKey, webinarName, email) {
   try {
     const resolved = await getApiWebinarId(apiKey, webinarName);
     if (!resolved) return null;
-    const { base, apiId } = resolved;
+    const { base, apiId, platform } = resolved;
 
     const res = await fetch(`${base}/registrants`, {
       method: 'POST',
@@ -124,6 +127,7 @@ export async function fetchRegistrantData(apiKey, webinarName, email) {
     const timeReplayMins  = parseHMStoMins(reg.time_replay);
 
     return {
+      platform,                    // 'WebinarJam' or 'EverWebinar' — set as webinar_type by handler
       scheduledDate,
       scheduledTime,
       registeredAt,
@@ -172,19 +176,17 @@ export function normalizePayload(raw) {
     phone,
     webinarId:    String(webinar.id   || raw.webinar_id   || ''),
     webinarName:  webinar.name || raw.webinar_name || '',
-    webinarType:  'WebinarJam',
-    source:       'WebinarJam',
+    // Default to "Unknown" — the registration handler upgrades to
+    // "WebinarJam" or "EverWebinar" when API enrichment confirms which.
+    webinarType:  'Unknown',
     scheduledDate: '',
     scheduledTime: '',
     registeredAt:  new Date().toISOString(),
     attended:      undefined,
-    timeWatched:   undefined,
-    watchPercentage: undefined,
     replayWatched: undefined,
-    noShow:        undefined,
     // Per-registrant join URLs — WebinarJam puts these directly in the webhook's
-    // `links` object, not in the API. Empty string when not provided so the field
-    // doesn't get set to undefined and skipped in buildCustomFields.
+    // `links` object. Empty string when not provided so they're falsy and
+    // get skipped in buildCustomFields rather than written as empty strings.
     liveRoomLink:   links.live_room   || links.live   || '',
     replayRoomLink: links.replay_room || links.replay || '',
   };

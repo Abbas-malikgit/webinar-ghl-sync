@@ -18,31 +18,16 @@ export const config = {
 };
 
 // ─── GHL Custom Field Keys ────────────────────────────────────
-// Shared across all clients — the field keys must exist in each
-// client's GHL sub-account. You must create these manually for now
-// (Settings → Custom Fields in each sub-account). See the included
-// FIELDS-SETUP.md for the full list and types.
+// These keys must exist as Custom Fields in each client's GHL sub-account.
+// Field names in GHL are display-only — what matters is the unique key
+// (the part after "contact." in GHL's field detail view).
 export const FIELDS = {
-  webinarName:              'webinar_name',
-  webinarId:                'webinar_id',
-  webinarType:              'webinar_type',
-  webinarRegisteredDate:    'webinar_registered_date',
-  webinarScheduledDate:     'webinar_scheduled_date',
-  webinarScheduledTime:     'webinar_scheduled_time',
-  registrationSource:       'webinar_registration_source',
-  webinarAttended:          'webinar_attended',
-  timeWatchedMins:          'time_watched_mins',
-  watchPercentage:          'watch_percentage',
-  replayWatched:            'replay_watched',
-  webinarNoShow:            'webinar_no_show',
-  webinarLiveRoomLink:      'webinar_live_room_link',
-  webinarReplayRoomLink:    'webinar_replay_room_link',
-
-  // Consultation fields — defined for downstream use by GHL workflows.
-  // Not auto-written by the sync app.
-  consultationBookedDate:   'consultation_booked_date',
-  consultationDate:         'consultation_date',
-  consultationPaid:         'consultation_paid',
-  consultationAmount:       'consultation_amount',
-  consultationStatus:       'consultation_status',
+  webinarRegisteredDate:    'webinar_registered_date',  // Date — when they registered
+  webinarDate:              'webinar_date',             // Date — scheduled session date
+  webinarTime:              'webinar_time',             // Text — scheduled session time
+  webinarType:              'webinar_type',             // Text — "WebinarJam" / "EverWebinar" / "Unknown"
+  webinarAttended:          'webinar_attended',         // Single Option Yes/No
+  replayWatched:            'replay_watched',           // Text
+  liveRoomLink:             'live_room_link',           // Text — per-registrant tokenized URL
+  replayRoomLink:           'replay_room_link',         // Text — per-registrant tokenized URL
 };

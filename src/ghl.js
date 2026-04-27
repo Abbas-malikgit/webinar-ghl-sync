@@ -42,32 +42,24 @@ function buildCustomFields(data) {
   const fields = [];
   const push = (item) => item && fields.push(item);
 
-  push(field(FIELDS.webinarName,           data.webinarName));
-  push(field(FIELDS.webinarId,             data.webinarId));
-  push(field(FIELDS.webinarType,           data.webinarType));
+  // Date fields
   push(dateField(FIELDS.webinarRegisteredDate, data.registeredAt));
-  push(dateField(FIELDS.webinarScheduledDate,  data.scheduledDate));
-  push(field(FIELDS.webinarScheduledTime,  data.scheduledTime));
-  push(field(FIELDS.registrationSource,    data.source));
+  push(dateField(FIELDS.webinarDate,           data.scheduledDate));
 
+  // Text fields
+  push(field(FIELDS.webinarTime, data.scheduledTime));
+  push(field(FIELDS.webinarType, data.webinarType));   // "WebinarJam" | "EverWebinar" | "Unknown"
+
+  // Attendance state — only push when handler has actual data
   if (data.attended !== undefined)
     push(field(FIELDS.webinarAttended, data.attended ? 'Yes' : 'No'));
 
-  if (data.timeWatched !== undefined)
-    push(numField(FIELDS.timeWatchedMins, data.timeWatched));
-
-  if (data.watchPercentage !== undefined)
-    push(numField(FIELDS.watchPercentage, data.watchPercentage));
-
   if (data.replayWatched !== undefined)
-    push(field(FIELDS.replayWatched, data.replayWatched));
+    push(field(FIELDS.replayWatched, data.replayWatched ? 'Yes' : 'No'));
 
-  if (data.noShow !== undefined)
-    push(field(FIELDS.webinarNoShow, data.noShow));
-
-  // Live + replay join links — only present when API enrichment runs.
-  if (data.liveRoomLink)   push(field(FIELDS.webinarLiveRoomLink,   data.liveRoomLink));
-  if (data.replayRoomLink) push(field(FIELDS.webinarReplayRoomLink, data.replayRoomLink));
+  // Per-registrant join URLs (from webhook payload's `links` object)
+  if (data.liveRoomLink)   push(field(FIELDS.liveRoomLink,   data.liveRoomLink));
+  if (data.replayRoomLink) push(field(FIELDS.replayRoomLink, data.replayRoomLink));
 
   return fields.filter(Boolean);
 }
