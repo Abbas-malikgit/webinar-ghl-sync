@@ -110,6 +110,7 @@ export async function enrollContactInWorkflow(client, contactId, workflowId) {
 // ─── Contacts ────────────────────────────────────────────────
 
 export async function findContactByEmail(client, email) {
+  if (!email) return null;
   const url = `${BASE}/contacts/?locationId=${client.ghlLocationId}&query=${encodeURIComponent(email)}`;
   const res = await fetch(url, { headers: headers(client.ghlApiKey) });
   const data = await res.json();
@@ -123,15 +124,10 @@ export async function findContactByEmail(client, email) {
   return contacts.find(c => c.email?.toLowerCase() === email.toLowerCase()) || null;
 }
 
-// Search by phone — strips formatting and matches on digits only.
-// Returns the first contact whose normalized phone matches, or null.
+// Strict phone match — GHL's search returns partial matches, we want exact.
+// Compares on digits-only so "+1 (415) 555-1234" matches "+14155551234".
 export async function findContactByPhone(client, phone) {
   if (!phone) return null;
-  const norm = String(phone).replace(/\D/g, '');
-  if (!norm) return null;
-
-  // GHL's contacts search query accepts the phone as a free-text query.
-  // Pass the raw phone (with +) so GHL's own normalization runs.
   const url = `${BASE}/contacts/?locationId=${client.ghlLocationId}&query=${encodeURIComponent(phone)}`;
   const res = await fetch(url, { headers: headers(client.ghlApiKey) });
   const data = await res.json();
@@ -141,8 +137,9 @@ export async function findContactByPhone(client, phone) {
     return null;
   }
 
+  const target = phone.replace(/\D/g, '');
   const contacts = data?.contacts || [];
-  return contacts.find(c => (c.phone || '').replace(/\D/g, '') === norm) || null;
+  return contacts.find(c => (c.phone || '').replace(/\D/g, '') === target) || null;
 }
 
 export async function createContact(client, contactData) {
@@ -163,7 +160,14 @@ export async function createContact(client, contactData) {
   });
 
   const data = await res.json();
-  if (!res.ok) throw new Error(`GHL createContact failed: ${JSON.stringify(data)}`);
+  if (!res.ok) {
+    // Surface the GHL response object as a structured error so upsertContact
+    // can detect the "duplicate phone" case and recover by updating instead.
+    const err = new Error(`GHL createContact failed: ${JSON.stringify(data)}`);
+    err.response = data;
+    err.status   = res.status;
+    throw err;
+  }
 
   console.log(`✅ Contact created: ${data.contact?.id} (${contactData.email})`);
   return data.contact;
@@ -177,6 +181,7 @@ export async function updateContact(client, contactId, contactData) {
   if (contactData.firstName) body.firstName = contactData.firstName;
   if (contactData.lastName)  body.lastName  = contactData.lastName;
   if (contactData.phone)     body.phone     = contactData.phone;
+  if (contactData.email)     body.email     = contactData.email;
 
   const res = await fetch(`${BASE}/contacts/${contactId}`, {
     method: 'PUT',
@@ -191,29 +196,42 @@ export async function updateContact(client, contactId, contactData) {
   return data.contact;
 }
 
+// Smart upsert: search phone first, then email, fall through to create.
+// If create still fails with "duplicate" (race or stale search), recover by
+// pulling the existing contact ID from GHL's error response and updating it.
 export async function upsertContact(client, contactData) {
-  // Search by PHONE first — GHL's "no duplicate contacts" setting enforces phone
-  // uniqueness server-side, so trying email-first lets a dup-phone create slip
-  // through and get rejected with a 400. Phone-first matches what GHL itself does.
-  let existing = null;
+  // 1. Try phone first (most reliable in WebinarJam — phone is typed by user, less typo-prone than email)
   if (contactData.phone) {
-    existing = await findContactByPhone(client, contactData.phone);
-    if (existing) {
-      console.log(`🔁 Existing contact found by phone: ${existing.id}`);
+    const byPhone = await findContactByPhone(client, contactData.phone);
+    if (byPhone) {
+      console.log(`🔁 Existing contact found by phone: ${byPhone.id}`);
+      await updateContact(client, byPhone.id, contactData);
+      return byPhone;
     }
   }
 
-  // Fall back to email lookup if no phone match (or no phone on payload)
-  if (!existing) {
-    existing = await findContactByEmail(client, contactData.email);
-    if (existing) {
-      console.log(`🔁 Existing contact found by email: ${existing.id}`);
+  // 2. Fall back to email
+  if (contactData.email) {
+    const byEmail = await findContactByEmail(client, contactData.email);
+    if (byEmail) {
+      console.log(`🔁 Existing contact found by email: ${byEmail.id}`);
+      await updateContact(client, byEmail.id, contactData);
+      return byEmail;
     }
   }
 
-  if (existing) {
-    await updateContact(client, existing.id, contactData);
-    return existing;
+  // 3. Neither found — try to create. If GHL says duplicate, GHL hands us
+  //    the matching contactId in error.response.meta.contactId — use it.
+  try {
+    return await createContact(client, contactData);
+  } catch (err) {
+    const meta = err?.response?.meta;
+    const isDup = err?.response?.message?.toLowerCase().includes('duplicat');
+    if (isDup && meta?.contactId) {
+      console.log(`🔁 Recovered duplicate from GHL error (matched on ${meta.matchingField}): ${meta.contactId}`);
+      await updateContact(client, meta.contactId, contactData);
+      return { id: meta.contactId, email: contactData.email, phone: contactData.phone };
+    }
+    throw err;
   }
-  return await createContact(client, contactData);
 }

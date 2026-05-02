@@ -11,7 +11,7 @@ import { config } from './config.js';
 
 const RETENTION_DAYS   = 30;
 const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;  // once per day
-const RECENT_CACHE_SIZE = 5000;                 // in-memory recent for instant dashboard reads
+const RECENT_CACHE_SIZE = 500;                  // in-memory recent for instant dashboard reads
 
 const eventsPath = () => path.join(config.dataDir, 'events.jsonl');
 
@@ -19,6 +19,73 @@ const eventsPath = () => path.join(config.dataDir, 'events.jsonl');
 // Populated on boot by scanning the tail of events.jsonl, then
 // updated live on every append. Keeps dashboard instant.
 const recentCache = [];
+
+// ─── Stats counters ──────────────────────────────────────────
+// Maintained live so dashboard reads are O(1) regardless of file size.
+// Hydrated from disk on first call. Counters are by clientSlug:
+//   counters[slug] = { registrations, attended, noShows, replays, unhandled, errors, queued, retrying, total }
+// Plus an `_overall` key with the same shape covering all clients combined.
+const counters = { _overall: emptyStats() };
+let countersHydrated = false;
+
+function emptyStats() {
+  return {
+    registrations: 0, attended: 0, noShows: 0, replays: 0,
+    unhandled: 0, errors: 0, queued: 0, retrying: 0, total: 0,
+  };
+}
+
+function bucketFor(e) {
+  // Returns the counter key this event currently contributes to.
+  // null = no counter (we don't count, e.g., explicit OK retries-of-error)
+  const status = e.status || 'ok';
+  if (status === 'error')    return 'errors';
+  if (status === 'queued')   return 'queued';
+  if (status === 'retrying') return 'retrying';
+  if (status === 'warn' && e.kind === 'unhandled') return 'unhandled';
+  if (status === 'ok') {
+    if (e.kind === 'registration') return 'registrations';
+    if (e.kind === 'attended')     return 'attended';
+    if (e.kind === 'no_show')      return 'noShows';
+    if (e.kind === 'replay')       return 'replays';
+  }
+  return null;
+}
+
+function bumpCounter(slug, bucket, delta = 1) {
+  if (!counters[slug]) counters[slug] = emptyStats();
+  if (bucket && bucket in counters[slug]) {
+    counters[slug][bucket] += delta;
+    counters._overall[bucket] += delta;
+  }
+}
+
+function bumpTotal(slug, delta = 1) {
+  if (!counters[slug]) counters[slug] = emptyStats();
+  counters[slug].total      += delta;
+  counters._overall.total   += delta;
+}
+
+async function hydrateCounters() {
+  // Reset, then replay everything from disk
+  for (const k of Object.keys(counters)) delete counters[k];
+  counters._overall = emptyStats();
+
+  const all = await readAllEvents();
+  for (const e of all) {
+    const slug = e.clientSlug || '_unknown';
+    bumpTotal(slug);
+    const b = bucketFor(e);
+    if (b) bumpCounter(slug, b);
+  }
+  countersHydrated = true;
+}
+
+export async function getStats(clientSlug) {
+  if (!countersHydrated) await hydrateCounters();
+  if (clientSlug) return { ...(counters[clientSlug] || emptyStats()) };
+  return { ...counters._overall };
+}
 
 function ensureFile() {
   if (!fs.existsSync(config.dataDir)) fs.mkdirSync(config.dataDir, { recursive: true });
@@ -41,6 +108,15 @@ export function appendEvent(evt) {
   // Update in-memory cache (unshift = newest first)
   recentCache.unshift(full);
   if (recentCache.length > RECENT_CACHE_SIZE) recentCache.length = RECENT_CACHE_SIZE;
+
+  // Update counters — only if hydrated, otherwise hydrateCounters() will pick this up.
+  if (countersHydrated) {
+    const slug = full.clientSlug || '_unknown';
+    bumpTotal(slug);
+    const b = bucketFor(full);
+    if (b) bumpCounter(slug, b);
+  }
+
   return full;
 }
 
@@ -58,7 +134,9 @@ export function updateEvent(id, patch) {
     const all = await readAllEvents();
     const idx = all.findIndex(e => e.id === id);
     if (idx === -1) return null;
-    all[idx] = { ...all[idx], ...patch };
+    const before = all[idx];
+    const after  = { ...before, ...patch };
+    all[idx] = after;
     // readAllEvents returns newest-first; rewrite in chronological order
     const chronological = all.slice().reverse();
     const tmp = eventsPath() + '.tmp';
@@ -66,8 +144,20 @@ export function updateEvent(id, patch) {
     fs.renameSync(tmp, eventsPath());
     // Refresh cache
     const cacheIdx = recentCache.findIndex(e => e.id === id);
-    if (cacheIdx !== -1) recentCache[cacheIdx] = all[idx];
-    return all[idx];
+    if (cacheIdx !== -1) recentCache[cacheIdx] = after;
+
+    // Counters: subtract from previous bucket, add to new bucket. Total unchanged.
+    if (countersHydrated) {
+      const slug = before.clientSlug || '_unknown';
+      const oldBucket = bucketFor(before);
+      const newBucket = bucketFor(after);
+      if (oldBucket !== newBucket) {
+        if (oldBucket) bumpCounter(slug, oldBucket, -1);
+        if (newBucket) bumpCounter(slug, newBucket, +1);
+      }
+    }
+
+    return after;
   };
   // Chain so only one updateEvent runs at a time
   const next = updateChain.then(run, run);
@@ -119,27 +209,6 @@ export async function queryEvents({
   return { rows, total };
 }
 
-// ─── Tally counts across the full event log ──────────────────
-// Used by dashboard stat cards (Registrations / Attended / Errors / etc.).
-// Streams the full jsonl once and returns a complete tally — never sliced.
-// If clientSlug is provided, counts only events for that client.
-export async function countByKind({ clientSlug } = {}) {
-  const tally = { registrations: 0, attended: 0, noShows: 0, replays: 0, unhandled: 0, errors: 0 };
-  const all = await readAllEvents();
-  for (const e of all) {
-    if (clientSlug && e.clientSlug !== clientSlug) continue;
-    if (e.status === 'error') tally.errors++;
-    if (e.status === 'ok') {
-      if (e.kind === 'registration') tally.registrations++;
-      else if (e.kind === 'attended') tally.attended++;
-      else if (e.kind === 'no_show')  tally.noShows++;
-      else if (e.kind === 'replay')   tally.replays++;
-    }
-    if (e.kind === 'unhandled') tally.unhandled++;
-  }
-  return tally;
-}
-
 // ─── Fast path: get recent events from in-memory cache ───────
 // Used by dashboard polling. Auto-hydrates cache on first call after boot.
 let cacheHydrated = false;
@@ -149,13 +218,13 @@ async function hydrateCache() {
   for (const e of all.slice(0, RECENT_CACHE_SIZE)) recentCache.push(e);
   cacheHydrated = true;
 }
-export async function getRecent({ clientSlug, status, kind, limit = 200 } = {}) {
+export async function getRecent({ clientSlug, status, kind } = {}) {
   if (!cacheHydrated) await hydrateCache();
   let out = recentCache;
   if (clientSlug) out = out.filter(e => e.clientSlug === clientSlug);
   if (status)     out = out.filter(e => (e.status || 'ok') === status);
   if (kind && kind !== 'all') out = out.filter(e => (e.kind || '').toLowerCase() === kind);
-  return out.slice(0, limit);
+  return out.slice(0, 200);
 }
 
 // ─── CSV export ──────────────────────────────────────────────
@@ -291,6 +360,9 @@ export async function pruneOldEvents() {
   // Refresh cache
   recentCache.length = 0;
   for (const e of kept.slice(0, RECENT_CACHE_SIZE)) recentCache.push(e);
+  // Refresh counters from the kept events (more accurate than trying to subtract)
+  countersHydrated = false;
+  await hydrateCounters();
   return { removed, kept: kept.length };
 }
 

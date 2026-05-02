@@ -90,9 +90,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ─── Status ─────────────────────────────────────────────────────
 app.get('/api/status', async (req, res) => {
   const clients = store.listClients();
-  // Tally the FULL event log — getRecent only returns the cached recent slice
-  // and would undercount any client with more than ~200 events.
-  const overall = await events.countByKind();
+  // Counters are maintained live and don't depend on the 200-row cache, so this
+  // is accurate across all 30 days of history.
+  const overall = await events.getStats();
   res.json({
     status:      'running',
     uptimeMs:    Date.now() - serverStart,
@@ -105,9 +105,7 @@ app.get('/api/status', async (req, res) => {
 
 // ─── Clients ────────────────────────────────────────────────────
 async function statsForSlug(slug) {
-  // Use countByKind which streams the full event log — getRecent only returns
-  // the cached recent slice so per-client stats were undercounted on busy clients.
-  return await events.countByKind({ clientSlug: slug });
+  return await events.getStats(slug);
 }
 
 app.get('/api/clients', async (req, res) => {
@@ -193,23 +191,11 @@ app.post('/api/ghl/verify', async (req, res) => {
 app.get('/api/events', async (req, res) => {
   try {
     const { clientSlug, status, filter } = req.query;
-    const limit = Math.min(parseInt(req.query.limit) || 1000, 5000);
-
-    // When filtering by clientSlug, scan the full file via queryEvents — the
-    // in-memory recentCache is global across all clients, so for a single hot
-    // client it would only return whatever's in the recent slice (and was
-    // previously hard-capped at 200). queryEvents reads the whole jsonl with
-    // proper pagination, which is what the per-client dashboard view needs.
-    if (clientSlug) {
-      const { rows } = await events.queryEvents({
-        clientSlug, status, kind: filter,
-        limit, offset: 0,
-      });
-      return res.json(rows);
-    }
-
-    // Global "recent activity" view — fast cache path is fine here
-    const out = await events.getRecent({ status, kind: filter, limit });
+    const out = await events.getRecent({
+      clientSlug,
+      status,
+      kind: filter,
+    });
     res.json(out);
   } catch (e) {
     res.status(500).json({ error: e.message });

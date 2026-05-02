@@ -163,27 +163,9 @@ export function normalizePayload(raw) {
   const firstName = lead.first_name || raw.first_name || '';
   const lastName  = lead.last_name  || raw.last_name  || '';
   const email     = lead.email || raw.email || '';
-  const phoneCountry = String(lead.phone_country_code || '').replace(/\s+/g, '');
-  const phoneNumber  = String(lead.phone_number || raw.phone || '').replace(/\s+/g, '');
-
-  // Build E.164-ish phone. WebinarJam sometimes ships `phone_number` already
-  // including the country code (e.g. cc=+250, number=+250722776822) which
-  // produced `+250+250722776822` and made GHL reject the contact. If the number
-  // already starts with the country code (with or without a leading +), strip it.
-  let phone = '';
-  if (phoneNumber) {
-    const ccDigits = phoneCountry.replace(/\D/g, '');
-    let numDigits  = phoneNumber.replace(/\D/g, '');
-    if (ccDigits && numDigits.startsWith(ccDigits)) {
-      numDigits = numDigits.slice(ccDigits.length);
-    }
-    if (ccDigits && numDigits) {
-      phone = `+${ccDigits}${numDigits}`;
-    } else if (numDigits) {
-      // No country code provided — keep digits and prefix with +
-      phone = `+${numDigits}`;
-    }
-  }
+  const phoneCountry = (lead.phone_country_code || '').trim();
+  const phoneNumber  = (lead.phone_number || raw.phone || '').trim();
+  const phone = buildE164(phoneCountry, phoneNumber);
 
   return {
     firstName,
@@ -209,6 +191,38 @@ export function normalizePayload(raw) {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────
+
+// Build a clean phone number from WebinarJam's quirky inputs. WJ sometimes
+// sends `phone_country_code = "+250"` AND `phone_number = "+250722776822"`
+// — naive concat gives "+250+250722776822" which GHL rejects.
+//
+// Rules:
+//   - If phone_number already starts with "+", treat it as already E.164 and ignore country_code
+//   - If phone_number starts with the digits of country_code, just prepend "+"
+//   - Otherwise, prepend the country code with "+"
+//   - Strip spaces, dashes, parens
+export function buildE164(countryCode, number) {
+  if (!number) return '';
+
+  // Strip everything that isn't a digit or leading +
+  const cleanNum = number.replace(/[^\d+]/g, '');
+  if (!cleanNum) return '';
+
+  // Already E.164? trust it
+  if (cleanNum.startsWith('+')) return cleanNum;
+
+  if (!countryCode) return cleanNum;   // no country code, return as-is
+
+  // Country code might be "+250" or "250" — normalize to "+250"
+  const cleanCC  = countryCode.replace(/[^\d+]/g, '');
+  const ccDigits = cleanCC.replace('+', '');
+  if (!ccDigits) return cleanNum;
+
+  // If the number already begins with the CC digits, just stick a + on the front
+  if (cleanNum.startsWith(ccDigits)) return `+${cleanNum}`;
+
+  return `+${ccDigits}${cleanNum}`;
+}
 
 function parseDateString(str) {
   if (!str) return { date: '', time: '' };
