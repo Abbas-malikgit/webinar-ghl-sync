@@ -163,11 +163,27 @@ export function normalizePayload(raw) {
   const firstName = lead.first_name || raw.first_name || '';
   const lastName  = lead.last_name  || raw.last_name  || '';
   const email     = lead.email || raw.email || '';
-  const phoneCountry = lead.phone_country_code || '';
-  const phoneNumber  = lead.phone_number || raw.phone || '';
-  const phone = phoneCountry && phoneNumber
-    ? `${phoneCountry}${phoneNumber}`.replace(/\s+/g, '')
-    : phoneNumber;
+  const phoneCountry = String(lead.phone_country_code || '').replace(/\s+/g, '');
+  const phoneNumber  = String(lead.phone_number || raw.phone || '').replace(/\s+/g, '');
+
+  // Build E.164-ish phone. WebinarJam sometimes ships `phone_number` already
+  // including the country code (e.g. cc=+250, number=+250722776822) which
+  // produced `+250+250722776822` and made GHL reject the contact. If the number
+  // already starts with the country code (with or without a leading +), strip it.
+  let phone = '';
+  if (phoneNumber) {
+    const ccDigits = phoneCountry.replace(/\D/g, '');
+    let numDigits  = phoneNumber.replace(/\D/g, '');
+    if (ccDigits && numDigits.startsWith(ccDigits)) {
+      numDigits = numDigits.slice(ccDigits.length);
+    }
+    if (ccDigits && numDigits) {
+      phone = `+${ccDigits}${numDigits}`;
+    } else if (numDigits) {
+      // No country code provided — keep digits and prefix with +
+      phone = `+${numDigits}`;
+    }
+  }
 
   return {
     firstName,

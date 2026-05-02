@@ -11,7 +11,7 @@ import { config } from './config.js';
 
 const RETENTION_DAYS   = 30;
 const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;  // once per day
-const RECENT_CACHE_SIZE = 500;                  // in-memory recent for instant dashboard reads
+const RECENT_CACHE_SIZE = 5000;                 // in-memory recent for instant dashboard reads
 
 const eventsPath = () => path.join(config.dataDir, 'events.jsonl');
 
@@ -128,13 +128,13 @@ async function hydrateCache() {
   for (const e of all.slice(0, RECENT_CACHE_SIZE)) recentCache.push(e);
   cacheHydrated = true;
 }
-export async function getRecent({ clientSlug, status, kind } = {}) {
+export async function getRecent({ clientSlug, status, kind, limit = 200 } = {}) {
   if (!cacheHydrated) await hydrateCache();
   let out = recentCache;
   if (clientSlug) out = out.filter(e => e.clientSlug === clientSlug);
   if (status)     out = out.filter(e => (e.status || 'ok') === status);
   if (kind && kind !== 'all') out = out.filter(e => (e.kind || '').toLowerCase() === kind);
-  return out.slice(0, 200);
+  return out.slice(0, limit);
 }
 
 // ─── CSV export ──────────────────────────────────────────────

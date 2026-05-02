@@ -123,6 +123,28 @@ export async function findContactByEmail(client, email) {
   return contacts.find(c => c.email?.toLowerCase() === email.toLowerCase()) || null;
 }
 
+// Search by phone — strips formatting and matches on digits only.
+// Returns the first contact whose normalized phone matches, or null.
+export async function findContactByPhone(client, phone) {
+  if (!phone) return null;
+  const norm = String(phone).replace(/\D/g, '');
+  if (!norm) return null;
+
+  // GHL's contacts search query accepts the phone as a free-text query.
+  // Pass the raw phone (with +) so GHL's own normalization runs.
+  const url = `${BASE}/contacts/?locationId=${client.ghlLocationId}&query=${encodeURIComponent(phone)}`;
+  const res = await fetch(url, { headers: headers(client.ghlApiKey) });
+  const data = await res.json();
+
+  if (!res.ok) {
+    console.error('GHL phone search error:', data);
+    return null;
+  }
+
+  const contacts = data?.contacts || [];
+  return contacts.find(c => (c.phone || '').replace(/\D/g, '') === norm) || null;
+}
+
 export async function createContact(client, contactData) {
   const body = {
     locationId: client.ghlLocationId,
@@ -170,9 +192,26 @@ export async function updateContact(client, contactId, contactData) {
 }
 
 export async function upsertContact(client, contactData) {
-  const existing = await findContactByEmail(client, contactData.email);
+  // Search by PHONE first — GHL's "no duplicate contacts" setting enforces phone
+  // uniqueness server-side, so trying email-first lets a dup-phone create slip
+  // through and get rejected with a 400. Phone-first matches what GHL itself does.
+  let existing = null;
+  if (contactData.phone) {
+    existing = await findContactByPhone(client, contactData.phone);
+    if (existing) {
+      console.log(`🔁 Existing contact found by phone: ${existing.id}`);
+    }
+  }
+
+  // Fall back to email lookup if no phone match (or no phone on payload)
+  if (!existing) {
+    existing = await findContactByEmail(client, contactData.email);
+    if (existing) {
+      console.log(`🔁 Existing contact found by email: ${existing.id}`);
+    }
+  }
+
   if (existing) {
-    console.log(`🔁 Existing contact found: ${existing.id}`);
     await updateContact(client, existing.id, contactData);
     return existing;
   }

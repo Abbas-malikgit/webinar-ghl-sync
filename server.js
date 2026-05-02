@@ -213,11 +213,23 @@ app.post('/api/ghl/verify', async (req, res) => {
 app.get('/api/events', async (req, res) => {
   try {
     const { clientSlug, status, filter } = req.query;
-    const out = await events.getRecent({
-      clientSlug,
-      status,
-      kind: filter,
-    });
+    const limit = Math.min(parseInt(req.query.limit) || 1000, 5000);
+
+    // When filtering by clientSlug, scan the full file via queryEvents — the
+    // in-memory recentCache is global across all clients, so for a single hot
+    // client it would only return whatever's in the recent slice (and was
+    // previously hard-capped at 200). queryEvents reads the whole jsonl with
+    // proper pagination, which is what the per-client dashboard view needs.
+    if (clientSlug) {
+      const { rows } = await events.queryEvents({
+        clientSlug, status, kind: filter,
+        limit, offset: 0,
+      });
+      return res.json(rows);
+    }
+
+    // Global "recent activity" view — fast cache path is fine here
+    const out = await events.getRecent({ status, kind: filter, limit });
     res.json(out);
   } catch (e) {
     res.status(500).json({ error: e.message });
