@@ -119,6 +119,27 @@ export async function queryEvents({
   return { rows, total };
 }
 
+// ─── Tally counts across the full event log ──────────────────
+// Used by dashboard stat cards (Registrations / Attended / Errors / etc.).
+// Streams the full jsonl once and returns a complete tally — never sliced.
+// If clientSlug is provided, counts only events for that client.
+export async function countByKind({ clientSlug } = {}) {
+  const tally = { registrations: 0, attended: 0, noShows: 0, replays: 0, unhandled: 0, errors: 0 };
+  const all = await readAllEvents();
+  for (const e of all) {
+    if (clientSlug && e.clientSlug !== clientSlug) continue;
+    if (e.status === 'error') tally.errors++;
+    if (e.status === 'ok') {
+      if (e.kind === 'registration') tally.registrations++;
+      else if (e.kind === 'attended') tally.attended++;
+      else if (e.kind === 'no_show')  tally.noShows++;
+      else if (e.kind === 'replay')   tally.replays++;
+    }
+    if (e.kind === 'unhandled') tally.unhandled++;
+  }
+  return tally;
+}
+
 // ─── Fast path: get recent events from in-memory cache ───────
 // Used by dashboard polling. Auto-hydrates cache on first call after boot.
 let cacheHydrated = false;

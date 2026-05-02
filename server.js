@@ -90,19 +90,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ─── Status ─────────────────────────────────────────────────────
 app.get('/api/status', async (req, res) => {
   const clients = store.listClients();
-  const overall = { registrations: 0, attended: 0, noShows: 0, replays: 0, unhandled: 0, errors: 0 };
-  // Tally from the persistent event log (accurate across restarts)
-  const recent = await events.getRecent();
-  for (const e of recent) {
-    if (e.status === 'error')      overall.errors++;
-    if (e.status === 'ok') {
-      if (e.kind === 'registration') overall.registrations++;
-      else if (e.kind === 'attended') overall.attended++;
-      else if (e.kind === 'no_show')  overall.noShows++;
-      else if (e.kind === 'replay')   overall.replays++;
-    }
-    if (e.kind === 'unhandled') overall.unhandled++;
-  }
+  // Tally the FULL event log — getRecent only returns the cached recent slice
+  // and would undercount any client with more than ~200 events.
+  const overall = await events.countByKind();
   res.json({
     status:      'running',
     uptimeMs:    Date.now() - serverStart,
@@ -115,19 +105,9 @@ app.get('/api/status', async (req, res) => {
 
 // ─── Clients ────────────────────────────────────────────────────
 async function statsForSlug(slug) {
-  const recent = await events.getRecent({ clientSlug: slug });
-  const s = { registrations: 0, attended: 0, noShows: 0, replays: 0, unhandled: 0, errors: 0 };
-  for (const e of recent) {
-    if (e.status === 'error') s.errors++;
-    if (e.status === 'ok') {
-      if (e.kind === 'registration') s.registrations++;
-      else if (e.kind === 'attended') s.attended++;
-      else if (e.kind === 'no_show')  s.noShows++;
-      else if (e.kind === 'replay')   s.replays++;
-    }
-    if (e.kind === 'unhandled') s.unhandled++;
-  }
-  return s;
+  // Use countByKind which streams the full event log — getRecent only returns
+  // the cached recent slice so per-client stats were undercounted on busy clients.
+  return await events.countByKind({ clientSlug: slug });
 }
 
 app.get('/api/clients', async (req, res) => {
