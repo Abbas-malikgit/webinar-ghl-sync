@@ -11,12 +11,11 @@ function headers(apiKey) {
   };
 }
 
-// GHL's workflow endpoint rejects the "Z" suffix AND milliseconds.
-// It wants the exact format from its own error message: 2021-06-23T03:30:00+00:00.
-// Same instant, no fractional seconds, explicit +HH:MM offset.
 function nowIsoWithOffset() {
   return new Date().toISOString().replace(/\.\d{3}Z$/, '+00:00');
 }
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // ─── Field helpers ───────────────────────────────────────────
 
@@ -32,39 +31,28 @@ function dateField(key, value) {
   return { key, field_value: d.toISOString().split('T')[0] };
 }
 
-function numField(key, value) {
-  const n = parseFloat(value);
-  if (isNaN(n)) return null;
-  return { key, field_value: n };
-}
-
 function buildCustomFields(data) {
   const fields = [];
   const push = (item) => item && fields.push(item);
 
-  // Date fields
   push(dateField(FIELDS.webinarRegisteredDate, data.registeredAt));
   push(dateField(FIELDS.webinarDate,           data.scheduledDate));
-
-  // Text fields
   push(field(FIELDS.webinarTime, data.scheduledTime));
-  push(field(FIELDS.webinarType, data.webinarType));   // "WebinarJam" | "EverWebinar" | "Unknown"
+  push(field(FIELDS.webinarType, data.webinarType));
 
-  // Attendance state — only push when handler has actual data
   if (data.attended !== undefined)
     push(field(FIELDS.webinarAttended, data.attended ? 'Yes' : 'No'));
 
   if (data.replayWatched !== undefined)
     push(field(FIELDS.replayWatched, data.replayWatched ? 'Yes' : 'No'));
 
-  // Per-registrant join URLs (from webhook payload's `links` object)
   if (data.liveRoomLink)   push(field(FIELDS.liveRoomLink,   data.liveRoomLink));
   if (data.replayRoomLink) push(field(FIELDS.replayRoomLink, data.replayRoomLink));
 
   return fields.filter(Boolean);
 }
 
-// ─── Location / Workflow discovery (for client setup wizard) ─
+// ─── Location / Workflow discovery ────────────────────────────
 
 export async function getLocation(apiKey, locationId) {
   const res = await fetch(`${BASE}/locations/${locationId}`, { headers: headers(apiKey) });
@@ -96,7 +84,6 @@ export async function enrollContactInWorkflow(client, contactId, workflowId) {
     body: JSON.stringify({ eventStartTime: nowIsoWithOffset() }),
   });
 
-  // GHL returns 200, 201, or 204 on success — use res.ok to accept any 2xx
   if (res.ok) {
     console.log(`✅ Enrolled contact ${contactId} in workflow ${workflowId}`);
     return true;
@@ -124,8 +111,6 @@ export async function findContactByEmail(client, email) {
   return contacts.find(c => c.email?.toLowerCase() === email.toLowerCase()) || null;
 }
 
-// Strict phone match — GHL's search returns partial matches, we want exact.
-// Compares on digits-only so "+1 (415) 555-1234" matches "+14155551234".
 export async function findContactByPhone(client, phone) {
   if (!phone) return null;
   const url = `${BASE}/contacts/?locationId=${client.ghlLocationId}&query=${encodeURIComponent(phone)}`;
@@ -140,6 +125,27 @@ export async function findContactByPhone(client, phone) {
   const target = phone.replace(/\D/g, '');
   const contacts = data?.contacts || [];
   return contacts.find(c => (c.phone || '').replace(/\D/g, '') === target) || null;
+}
+
+// More reliable than search query for fresh contacts — hits the
+// dedicated lookup endpoint which reads from the contacts table
+// directly (not the search index, which lags 30-90s).
+export async function lookupContactDirect(client, { email, phone }) {
+  if (!email && !phone) return null;
+  const params = new URLSearchParams({ locationId: client.ghlLocationId });
+  if (email) params.set('email', email);
+  if (phone) params.set('phone', phone);
+
+  try {
+    const url = `${BASE}/contacts/lookup?${params.toString()}`;
+    const res = await fetch(url, { headers: headers(client.ghlApiKey) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const contacts = data?.contacts || [];
+    return contacts[0] || null;
+  } catch (e) {
+    return null;
+  }
 }
 
 export async function createContact(client, contactData) {
@@ -161,8 +167,6 @@ export async function createContact(client, contactData) {
 
   const data = await res.json();
   if (!res.ok) {
-    // Surface the GHL response object as a structured error so upsertContact
-    // can detect the "duplicate phone" case and recover by updating instead.
     const err = new Error(`GHL createContact failed: ${JSON.stringify(data)}`);
     err.response = data;
     err.status   = res.status;
@@ -196,42 +200,98 @@ export async function updateContact(client, contactId, contactData) {
   return data.contact;
 }
 
-// Smart upsert: search phone first, then email, fall through to create.
-// If create still fails with "duplicate" (race or stale search), recover by
-// pulling the existing contact ID from GHL's error response and updating it.
-export async function upsertContact(client, contactData) {
-  // 1. Try phone first (most reliable in WebinarJam — phone is typed by user, less typo-prone than email)
-  if (contactData.phone) {
-    const byPhone = await findContactByPhone(client, contactData.phone);
+// ─── Smart contact resolver ──────────────────────────────────
+// Tries every reasonable way to find an existing contact before
+// giving up. Used by every handler for the upsert path.
+//
+// Strategy:
+//   1. lookup endpoint (direct, no index lag)  — phone or email
+//   2. search by phone (digits-only equality)
+//   3. search by email (case-insensitive)
+//   4. wait `retryDelayMs` (default 8s) and try lookup again — covers
+//      the GHL search-index-lag race when registration just happened
+//
+// Returns: matched GHL contact, or null if none found.
+async function findContactExhaustive(client, data, { retryDelayMs = 8000 } = {}) {
+  // 1. Direct lookup endpoint — most reliable
+  const direct = await lookupContactDirect(client, { email: data.email, phone: data.phone });
+  if (direct) {
+    console.log(`🔁 Found by lookup endpoint: ${direct.id}`);
+    return direct;
+  }
+
+  // 2. Search by phone
+  if (data.phone) {
+    const byPhone = await findContactByPhone(client, data.phone);
     if (byPhone) {
-      console.log(`🔁 Existing contact found by phone: ${byPhone.id}`);
-      await updateContact(client, byPhone.id, contactData);
+      console.log(`🔁 Found by phone search: ${byPhone.id}`);
       return byPhone;
     }
   }
 
-  // 2. Fall back to email
-  if (contactData.email) {
-    const byEmail = await findContactByEmail(client, contactData.email);
+  // 3. Search by email
+  if (data.email) {
+    const byEmail = await findContactByEmail(client, data.email);
     if (byEmail) {
-      console.log(`🔁 Existing contact found by email: ${byEmail.id}`);
-      await updateContact(client, byEmail.id, contactData);
+      console.log(`🔁 Found by email search: ${byEmail.id}`);
       return byEmail;
     }
   }
 
-  // 3. Neither found — try to create. If GHL says duplicate, GHL hands us
-  //    the matching contactId in error.response.meta.contactId — use it.
+  // 4. Last resort — wait and retry the lookup endpoint. This catches
+  //    the case where registration just happened and GHL's index hasn't
+  //    caught up yet. Only do this if we have an email or phone to look up.
+  if ((data.email || data.phone) && retryDelayMs > 0) {
+    console.log(`⏳ Not found on first pass — waiting ${Math.round(retryDelayMs/1000)}s before retry`);
+    await sleep(retryDelayMs);
+    const retry = await lookupContactDirect(client, { email: data.email, phone: data.phone });
+    if (retry) {
+      console.log(`🔁 Found on retry: ${retry.id}`);
+      return retry;
+    }
+  }
+
+  return null;
+}
+
+// ─── Find-or-create with attendance updates ──────────────────
+// Used by attended / no_show / replay handlers. Replaces the old
+// "findContactByEmail then bail" pattern that lost the 69 contacts.
+//
+// If no contact exists after exhaustive search, creates one from the
+// webhook data. If create fails as duplicate, recovers via meta.contactId.
+//
+// Returns: { contact, action: 'updated' | 'created' | 'recovered' }
+export async function findOrCreateContact(client, data) {
+  const found = await findContactExhaustive(client, data);
+  if (found) {
+    await updateContact(client, found.id, data);
+    return { contact: found, action: 'updated' };
+  }
+
+  console.log(`📝 No contact found — creating from webhook data`);
   try {
-    return await createContact(client, contactData);
+    const created = await createContact(client, data);
+    return { contact: created, action: 'created' };
   } catch (err) {
+    // Duplicate recovery — GHL hands us the matching contactId
     const meta = err?.response?.meta;
     const isDup = err?.response?.message?.toLowerCase().includes('duplicat');
     if (isDup && meta?.contactId) {
       console.log(`🔁 Recovered duplicate from GHL error (matched on ${meta.matchingField}): ${meta.contactId}`);
-      await updateContact(client, meta.contactId, contactData);
-      return { id: meta.contactId, email: contactData.email, phone: contactData.phone };
+      await updateContact(client, meta.contactId, data);
+      return {
+        contact: { id: meta.contactId, email: data.email, phone: data.phone },
+        action:  'recovered',
+      };
     }
     throw err;
   }
+}
+
+// Smart upsert — same idea, used by registration handler.
+// (Kept as separate name for clarity; under the hood it's the same flow.)
+export async function upsertContact(client, contactData) {
+  const result = await findOrCreateContact(client, contactData);
+  return result.contact;
 }

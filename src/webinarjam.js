@@ -4,12 +4,39 @@ const WJ_BASE = 'https://api.webinarjam.com/webinarjam';
 const EW_BASE = 'https://api.webinarjam.com/everwebinar';
 
 // ─── Per-client cache of resolved webinar IDs ────────────────
-// Key: `${apiKey}::${webinarName}` → { base, apiId, platform }
 const webinarIdCache = new Map();
 
-// ─── Find the API webinar_id by name — tries both WJ + EW ────
-// Returns { base, apiId, platform: 'WebinarJam' | 'EverWebinar' } so callers
-// can tell which platform owns the webinar.
+// ─── List ALL webinars for an API key (for the wizard) ────────
+// Hits both EverWebinar and WebinarJam. Tags each result with its
+// platform so the dashboard can show "JIT Webinar (EverWebinar)" etc.
+export async function listWebinars(apiKey) {
+  if (!apiKey) return [];
+  const out = [];
+  for (const [base, platform] of [[EW_BASE, 'EverWebinar'], [WJ_BASE, 'WebinarJam']]) {
+    try {
+      const res = await fetch(`${base}/webinars`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: apiKey }),
+      });
+      const data = await res.json();
+      if (data?.status !== 'success') continue;
+      const webinars = data?.webinars || [];
+      for (const w of webinars) {
+        out.push({
+          id:        String(w.webinar_id),
+          name:      w.name,
+          platform,
+          schedules: w.schedules || [],
+        });
+      }
+    } catch (e) {
+      console.warn(`listWebinars: ${platform} call failed:`, e.message);
+    }
+  }
+  return out;
+}
+
 async function getApiWebinarId(apiKey, webinarName) {
   const cacheKey = `${apiKey}::${webinarName}`;
   if (webinarIdCache.has(cacheKey)) return webinarIdCache.get(cacheKey);
@@ -42,7 +69,6 @@ async function getApiWebinarId(apiKey, webinarName) {
   return null;
 }
 
-// ─── Fetch full registrant record ─────────────────────────────
 export async function fetchRegistrantData(apiKey, webinarName, email) {
   if (!apiKey) {
     console.warn('⚠️  No WebinarJam API key for this client — skipping API enrichment');
@@ -81,7 +107,6 @@ export async function fetchRegistrantData(apiKey, webinarName, email) {
 
     console.log('✅ Registrant found:', reg.email);
 
-    // Session date/time
     let scheduledDate = '';
     let scheduledTime = '';
     if (reg.event) {
@@ -91,7 +116,6 @@ export async function fetchRegistrantData(apiKey, webinarName, email) {
       console.log(`📅 Session: ${scheduledDate} ${scheduledTime}`);
     }
 
-    // Registration date
     let registeredAt = '';
     if (reg.signup_date) {
       const val = reg.signup_date;
@@ -127,7 +151,7 @@ export async function fetchRegistrantData(apiKey, webinarName, email) {
     const timeReplayMins  = parseHMStoMins(reg.time_replay);
 
     return {
-      platform,                    // 'WebinarJam' or 'EverWebinar' — set as webinar_type by handler
+      platform,
       scheduledDate,
       scheduledTime,
       registeredAt,
@@ -141,9 +165,6 @@ export async function fetchRegistrantData(apiKey, webinarName, email) {
       utmSource:   reg.utm_source   || '',
       utmMedium:   reg.utm_medium   || '',
       utmCampaign: reg.utm_campaign || '',
-      // Per-registrant join URLs (these are tokenized and unique per contact).
-      // WebinarJam's /registrants response field names vary between WJ and EW;
-      // we accept either pattern and fall back to empty.
       liveRoomLink:   reg.live_room_url   || reg.live_url   || reg.url_live   || reg.live_link   || '',
       replayRoomLink: reg.replay_room_url || reg.replay_url || reg.url_replay || reg.replay_link || '',
     };
@@ -154,11 +175,48 @@ export async function fetchRegistrantData(apiKey, webinarName, email) {
   }
 }
 
-// ─── Normalize webhook payload ────────────────────────────────
+// ─── Resolve which workflows to use for this webhook ──────────
+// Looks at client.webinarOverrides[] for a match against the incoming
+// webinar.id (preferred) or webinar.name. Empty override fields fall
+// through to the client-level defaults.
+//
+// Returns: { registration, attended, noShow, replay, override }
+//   - workflow IDs are resolved (override → default → null)
+//   - override is the matched override object, or null if no match
+export function resolveWorkflows(client, payload) {
+  const webinarId   = String(payload?.webinar?.id   || '');
+  const webinarName = (payload?.webinar?.name || '').toLowerCase();
+
+  let override = null;
+  const overrides = Array.isArray(client.webinarOverrides) ? client.webinarOverrides : [];
+  for (const o of overrides) {
+    if (!o || !o.matchValue) continue;
+    if (o.matchType === 'id' && webinarId && String(o.matchValue) === webinarId) {
+      override = o; break;
+    }
+    if (o.matchType === 'name' && webinarName && String(o.matchValue).toLowerCase() === webinarName) {
+      override = o; break;
+    }
+  }
+
+  const pick = (overrideKey, defaultKey) => {
+    if (override && override[overrideKey]) return override[overrideKey];
+    return client[defaultKey] || null;
+  };
+
+  return {
+    registration: pick('workflowRegistration', 'workflowRegistration'),
+    attended:     pick('workflowAttended',     'workflowAttended'),
+    noShow:       pick('workflowNoShow',       'workflowNoShow'),
+    replay:       pick('workflowReplay',       'workflowReplay'),
+    override,
+  };
+}
+
 export function normalizePayload(raw) {
   const lead    = raw.lead    || {};
   const webinar = raw.webinar || {};
-  const links   = raw.links   || {};   // WebinarJam ships per-registrant tokenized URLs here
+  const links   = raw.links   || {};
 
   const firstName = lead.first_name || raw.first_name || '';
   const lastName  = lead.last_name  || raw.last_name  || '';
@@ -174,53 +232,27 @@ export function normalizePayload(raw) {
     phone,
     webinarId:    String(webinar.id   || raw.webinar_id   || ''),
     webinarName:  webinar.name || raw.webinar_name || '',
-    // Default to "Unknown" — the registration handler upgrades to
-    // "WebinarJam" or "EverWebinar" when API enrichment confirms which.
     webinarType:  'Unknown',
     scheduledDate: '',
     scheduledTime: '',
     registeredAt:  new Date().toISOString(),
     attended:      undefined,
     replayWatched: undefined,
-    // Per-registrant join URLs — WebinarJam puts these directly in the webhook's
-    // `links` object. Empty string when not provided so they're falsy and
-    // get skipped in buildCustomFields rather than written as empty strings.
     liveRoomLink:   links.live_room   || links.live   || '',
     replayRoomLink: links.replay_room || links.replay || '',
   };
 }
 
-// ─── Helpers ──────────────────────────────────────────────────
-
-// Build a clean phone number from WebinarJam's quirky inputs. WJ sometimes
-// sends `phone_country_code = "+250"` AND `phone_number = "+250722776822"`
-// — naive concat gives "+250+250722776822" which GHL rejects.
-//
-// Rules:
-//   - If phone_number already starts with "+", treat it as already E.164 and ignore country_code
-//   - If phone_number starts with the digits of country_code, just prepend "+"
-//   - Otherwise, prepend the country code with "+"
-//   - Strip spaces, dashes, parens
 export function buildE164(countryCode, number) {
   if (!number) return '';
-
-  // Strip everything that isn't a digit or leading +
   const cleanNum = number.replace(/[^\d+]/g, '');
   if (!cleanNum) return '';
-
-  // Already E.164? trust it
   if (cleanNum.startsWith('+')) return cleanNum;
-
-  if (!countryCode) return cleanNum;   // no country code, return as-is
-
-  // Country code might be "+250" or "250" — normalize to "+250"
+  if (!countryCode) return cleanNum;
   const cleanCC  = countryCode.replace(/[^\d+]/g, '');
   const ccDigits = cleanCC.replace('+', '');
   if (!ccDigits) return cleanNum;
-
-  // If the number already begins with the CC digits, just stick a + on the front
   if (cleanNum.startsWith(ccDigits)) return `+${cleanNum}`;
-
   return `+${ccDigits}${cleanNum}`;
 }
 

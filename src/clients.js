@@ -39,6 +39,30 @@ function genToken() {
   return randomBytes(16).toString('hex'); // 32 chars
 }
 
+// Sanitize webinarOverrides input — drop empty rows, ensure required fields,
+// give each row a stable id so the UI can track edits.
+function normalizeOverrides(input) {
+  if (!Array.isArray(input)) return [];
+  const out = [];
+  for (const o of input) {
+    if (!o || typeof o !== 'object') continue;
+    const matchValue = (o.matchValue || '').trim();
+    if (!matchValue) continue;  // empty match = drop
+    const matchType = o.matchType === 'name' ? 'name' : 'id';
+    out.push({
+      id:                   o.id || randomBytes(8).toString('hex'),
+      label:                (o.label || '').trim() || matchValue,
+      matchType,
+      matchValue,
+      workflowRegistration: o.workflowRegistration || null,
+      workflowAttended:     o.workflowAttended     || null,
+      workflowNoShow:       o.workflowNoShow       || null,
+      workflowReplay:       o.workflowReplay       || null,
+    });
+  }
+  return out;
+}
+
 // ─── Public API ──────────────────────────────────────────────
 
 export function listClients() {
@@ -81,6 +105,7 @@ export function createClient(data) {
     workflowAttended:     data.workflowAttended     || null,
     workflowNoShow:       data.workflowNoShow       || null,
     workflowReplay:       data.workflowReplay       || null,
+    webinarOverrides:     normalizeOverrides(data.webinarOverrides),
     webinarJamApiKey:     data.webinarJamApiKey     || null,
     webhookToken:         genToken(),
     createdAt:            now,
@@ -99,6 +124,11 @@ export function updateClient(slug, patch) {
 
   // Don't allow slug or token overwrite unless explicit
   const { slug: _s, webhookToken: _t, createdAt: _c, ...safe } = patch;
+
+  // Normalize overrides if they're being patched
+  if ('webinarOverrides' in safe) {
+    safe.webinarOverrides = normalizeOverrides(safe.webinarOverrides);
+  }
 
   clients[idx] = {
     ...clients[idx],

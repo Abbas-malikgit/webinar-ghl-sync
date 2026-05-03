@@ -514,6 +514,191 @@
     border-left: 2px solid var(--red);
   }
 
+  /* ─── Run History (Zapier-style pipeline) ─── */
+  .run-pipeline {
+    display: flex; flex-direction: column; gap: 0;
+    margin-bottom: 16px;
+  }
+  .run-step {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 0;
+    overflow: hidden;
+  }
+  .run-step + .run-step { margin-top: 8px; }
+  .run-step-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 14px;
+    background: var(--card-alt);
+    cursor: pointer;
+    user-select: none;
+  }
+  .run-step-header:hover { background: var(--card-hi); }
+  .run-step-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    font-size: 11px; font-weight: 600;
+    flex-shrink: 0;
+  }
+  .run-step-icon.ok      { background: rgba(34, 197, 94, 0.12); color: var(--green); border: 1px solid rgba(34, 197, 94, 0.3); }
+  .run-step-icon.fail    { background: rgba(239, 68, 68, 0.12); color: var(--red);   border: 1px solid rgba(239, 68, 68, 0.3); }
+  .run-step-icon.skip    { background: rgba(82, 82, 91, 0.12);  color: var(--dim);   border: 1px solid var(--border-hi); }
+  .run-step-name {
+    font-size: 12px; font-weight: 500; color: var(--text);
+    flex: 1;
+  }
+  .run-step-summary {
+    color: var(--muted); font-size: 11px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .run-step-toggle {
+    color: var(--dim); font-size: 11px;
+    transition: transform 0.15s ease;
+  }
+  .run-step.open .run-step-toggle { transform: rotate(90deg); }
+  .run-step-body {
+    max-height: 0; overflow: hidden;
+    transition: max-height 0.2s ease;
+  }
+  .run-step.open .run-step-body { max-height: 800px; }
+  .run-step-body-inner {
+    padding: 12px 14px;
+    border-top: 1px solid var(--border);
+    background: var(--card);
+  }
+  .kv-grid {
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    gap: 4px 12px;
+    font-size: 11px;
+  }
+  .kv-grid .k {
+    color: var(--dim); text-transform: uppercase;
+    letter-spacing: 0.08em; font-size: 10px;
+    padding-top: 2px;
+  }
+  .kv-grid .v {
+    color: var(--text); word-break: break-all;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .kv-grid .v.muted { color: var(--muted); }
+  .kv-grid .v.empty::after { content: '—'; color: var(--dim); }
+  .pipeline-arrow {
+    text-align: center;
+    font-size: 14px;
+    color: var(--dim);
+    margin: 0;
+    padding: 2px 0;
+  }
+  .raw-toggle {
+    display: inline-block;
+    margin-top: 12px;
+    color: var(--blue);
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .raw-toggle:hover { text-decoration: underline; }
+
+  /* ─── Search input ─── */
+  .search-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+  .search-input {
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px 6px 28px;
+    font-size: 11px;
+    width: 220px;
+    transition: border-color 0.15s ease;
+  }
+  .search-input:focus {
+    outline: none;
+    border-color: var(--border-hi);
+  }
+  .search-icon {
+    position: absolute; left: 9px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--dim);
+    font-size: 12px;
+    pointer-events: none;
+  }
+  .search-clear {
+    position: absolute; right: 8px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--dim);
+    font-size: 14px;
+    cursor: pointer;
+    line-height: 1;
+    display: none;
+  }
+  .search-input:not(:placeholder-shown) + .search-clear { display: block; }
+
+  /* ─── Per-Webinar Override editor ─── */
+  .override-list {
+    display: flex; flex-direction: column; gap: 14px;
+    margin-top: 14px;
+  }
+  .override-card {
+    border: 1px solid var(--border);
+    background: var(--card-alt);
+    padding: 14px;
+  }
+  .override-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .override-row label {
+    font-size: 10px; color: var(--dim);
+    letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  .override-wf-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .override-wf-grid .field { margin-bottom: 0; }
+  .override-add-btn {
+    margin-top: 6px;
+    background: transparent;
+    border: 1px dashed var(--border-hi);
+    color: var(--muted);
+    padding: 10px 14px;
+    cursor: pointer;
+    width: 100%;
+    text-align: center;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    transition: all 0.15s ease;
+  }
+  .override-add-btn:hover { color: var(--text); border-color: var(--text); }
+  .override-remove-btn {
+    background: transparent;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: var(--red);
+    font-size: 10px; letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 4px 9px;
+    cursor: pointer;
+  }
+  .override-remove-btn:hover { background: rgba(239, 68, 68, 0.08); }
+  .override-badge {
+    display: inline-block;
+    padding: 2px 7px;
+    background: rgba(168, 85, 247, 0.1);
+    border: 1px solid rgba(168, 85, 247, 0.25);
+    color: var(--purple);
+    font-size: 9px; letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-left: 8px;
+  }
+
   /* ─── Toast ─── */
   .toast-container {
     position: fixed; bottom: 24px; right: 24px;
@@ -607,6 +792,9 @@
     step: 1,
     name: '', slug: '', ghlApiKey: '', ghlLocationId: '', webinarJamApiKey: '',
     location: null, workflows: [],
+    wjWebinars: [],          // populated from /api/wj/list when WJ key provided
+    wjListError: null,       // optional error message from WJ list call
+    overrides: [],           // [{ id, label, matchType: 'id'|'name', matchValue, workflowRegistration, workflowAttended, workflowNoShow, workflowReplay }]
     wf: {
       registration: { mode: 'select', id: '' },
       attended:     { mode: 'select', id: '' },
@@ -616,6 +804,8 @@
   };
   let editingSlug = null;
   let clientDetailFilter = 'all';
+  let clientDetailSearch = '';
+  let globalSearch = '';
 
   const $ = s => document.querySelector(s);
   const view = () => $('#view');
@@ -725,10 +915,20 @@
           <div class="view-subtitle">Dashboard</div>
           <h2 class="view-title">All Clients</h2>
         </div>
-        <a href="#/new" class="btn btn-primary">+ Add Client</a>
+        <div class="controls">
+          <span class="search-wrap">
+            <span class="search-icon">⌕</span>
+            <input type="text" class="search-input" id="global-search" placeholder="Search events across all clients…" value="${esc(globalSearch)}">
+            <span class="search-clear" id="global-search-clear">×</span>
+          </span>
+          <a href="#/new" class="btn btn-primary">+ Add Client</a>
+        </div>
       </div>
       <div id="aggregate-stats"></div>
-      <div class="client-grid" id="client-grid"></div>
+      <div id="client-grid-wrap">
+        <div class="client-grid" id="client-grid"></div>
+      </div>
+      <div id="global-search-results" style="display:none;"></div>
     `;
 
     async function refresh() {
@@ -751,7 +951,35 @@
         `;
       }
 
-      // Clients grid
+      // If a global search is active, show matching events instead of clients
+      if (globalSearch && globalSearch.trim()) {
+        $('#client-grid-wrap').style.display = 'none';
+        const resultsEl = $('#global-search-results');
+        resultsEl.style.display = 'block';
+        try {
+          const evts = await api('GET', '/api/events?search=' + encodeURIComponent(globalSearch));
+          if (!evts || evts.length === 0) {
+            resultsEl.innerHTML = `
+              <div class="events-header"><span class="events-title">Search Results · "${esc(globalSearch)}"</span></div>
+              <div class="event-list"><div class="event-empty">No events match "${esc(globalSearch)}".</div></div>
+            `;
+          } else {
+            resultsEl.innerHTML = `
+              <div class="events-header"><span class="events-title">Search Results · ${evts.length} match${evts.length === 1 ? '' : 'es'} for "${esc(globalSearch)}"</span></div>
+              <div class="event-list" id="event-list"></div>
+            `;
+            renderEventList(evts);
+          }
+        } catch (e) {
+          resultsEl.innerHTML = `<div class="inline-error">Search failed: ${esc(e.message)}</div>`;
+        }
+        return;
+      }
+
+      // No search — show client grid as usual
+      $('#client-grid-wrap').style.display = '';
+      $('#global-search-results').style.display = 'none';
+
       if (!clients || clients.length === 0) {
         $('#client-grid').innerHTML = `
           <div class="empty-state">
@@ -783,6 +1011,25 @@
       `).join('');
     }
 
+    // Wire up search input — debounced
+    const searchEl = $('#global-search');
+    const clearEl  = $('#global-search-clear');
+    let searchDebounce = null;
+    if (searchEl) {
+      searchEl.addEventListener('input', e => {
+        globalSearch = e.target.value;
+        clearTimeout(searchDebounce);
+        searchDebounce = setTimeout(refresh, 200);
+      });
+    }
+    if (clearEl) {
+      clearEl.addEventListener('click', () => {
+        globalSearch = '';
+        if (searchEl) searchEl.value = '';
+        refresh();
+      });
+    }
+
     refresh();
     refreshTimer = setInterval(refresh, 5000);
   }
@@ -794,6 +1041,8 @@
     wizardState = {
       step: 1, name: '', slug: '', ghlApiKey: '', ghlLocationId: '', webinarJamApiKey: '',
       location: null, workflows: [],
+      wjWebinars: [], wjListError: null,
+      overrides: [],
       wf: {
         registration: { mode: 'select', id: '' },
         attended:     { mode: 'select', id: '' },
@@ -810,6 +1059,8 @@
     wizardState = {
       step: 2, name: '', slug: '', ghlApiKey: '', ghlLocationId: '', webinarJamApiKey: '',
       location: null, workflows: [],
+      wjWebinars: [], wjListError: null,
+      overrides: [],
       wf: {
         registration: { mode: 'select', id: '' },
         attended:     { mode: 'select', id: '' },
@@ -827,14 +1078,46 @@
       wizardState.name             = c.name;
       wizardState.slug             = c.slug;
       wizardState.ghlLocationId    = c.ghlLocationId;
-      wizardState.ghlApiKey        = c.ghlApiKey;       // masked, server-side preserved unless changed
-      wizardState.webinarJamApiKey = c.webinarJamApiKey; // masked
+      wizardState.ghlApiKey        = c.ghlApiKey;
+      wizardState.webinarJamApiKey = c.webinarJamApiKey;
       wizardState.wf = {
         registration: { mode: 'select', id: c.workflowRegistration || '' },
         attended:     { mode: 'select', id: c.workflowAttended     || '' },
         noShow:       { mode: 'select', id: c.workflowNoShow       || '' },
         replay:       { mode: 'select', id: c.workflowReplay       || '' },
       };
+      // Load existing overrides
+      wizardState.overrides = (c.webinarOverrides || []).map(o => ({
+        id: o.id || (Math.random().toString(36).slice(2, 10)),
+        label: o.label || '',
+        matchType: o.matchType || 'id',
+        matchValue: o.matchValue || '',
+        workflowRegistration: o.workflowRegistration || '',
+        workflowAttended:     o.workflowAttended     || '',
+        workflowNoShow:       o.workflowNoShow       || '',
+        workflowReplay:       o.workflowReplay       || '',
+      }));
+
+      // Need workflows for the dropdowns — re-verify GHL silently to load them
+      try {
+        const result = await api('POST', '/api/ghl/verify', {
+          apiKey: c.ghlApiKey, locationId: c.ghlLocationId,
+        });
+        wizardState.location  = result.location;
+        wizardState.workflows = result.workflows || [];
+      } catch (e) {
+        // GHL verify failed (e.g., the masked key was sent and rejected) — that's fine,
+        // dropdowns just stay empty and user can use manual mode or update the API key.
+        console.warn('Re-verify on edit failed, dropdowns will be empty:', e.message);
+      }
+
+      // Pre-fetch WJ webinars list if a key exists (helps the override picker)
+      if (c.webinarJamApiKey) {
+        api('POST', '/api/wj/list', { apiKey: c.webinarJamApiKey })
+          .then(r => { wizardState.wjWebinars = r.webinars || []; renderWizard(); })
+          .catch(e => { wizardState.wjListError = e.message; });
+      }
+
       renderWizard();
       toast('Loaded client — edit any field then save.', 'info');
     } catch (e) {
@@ -905,11 +1188,27 @@
         <div class="form-section-title">${isEdit ? 'Workflow Enrollment' : 'Step 2 of 2 — Workflow Enrollment'}</div>
         ${s.location ? `<div class="inline-success">✓ Connected to <strong>${esc(s.location.name || s.location.id)}</strong> · ${s.workflows.length} workflow(s) loaded</div>` : ''}
         ${!hasWorkflows && s.location ? `<div class="inline-error" style="margin-bottom:0;">No workflows found — you can still enter IDs manually below.</div>` : ''}
-        <p style="font-size:11px;color:var(--muted);line-height:1.7;">Select which GHL workflow to trigger for each event. All fields are optional — leave blank to skip enrollment for that event.</p>
+        <p style="font-size:11px;color:var(--muted);line-height:1.7;">Default workflows for every webinar this client receives. All fields are optional.</p>
         ${wfField('registration', 'Registration',  'Contact enrolled when they register.',        'blue')}
         ${wfField('attended',     'Attended Live',  'Contact enrolled when they watch the live.',  'green')}
         ${wfField('noShow',       'No Show',        'Contact enrolled when they miss the live.',   'amber')}
         ${wfField('replay',       'Watched Replay', 'Contact enrolled when they watch a replay.',  'purple')}
+      </div>
+
+      <div class="form-section">
+        <div class="form-section-title">Per-Webinar Overrides</div>
+        <p style="font-size:11px;color:var(--muted);line-height:1.7;margin-bottom:8px;">
+          Need a specific webinar to fire different workflows? Add an override below. We match incoming webhooks
+          by webinar ID (preferred) or name. Empty fields fall back to the defaults above.
+        </p>
+        ${s.wjWebinars && s.wjWebinars.length > 0
+          ? `<div class="inline-success" style="margin-bottom:0;">✓ ${s.wjWebinars.length} WJ/EW webinar(s) loaded — pick from the dropdown below.</div>`
+          : s.webinarJamApiKey
+            ? `<div class="inline-error" style="margin-bottom:0;background:rgba(245, 158, 11, 0.06);border-left-color:var(--amber);color:var(--amber);">WJ webinar list unavailable — enter IDs/names manually below. ${s.wjListError ? '(' + esc(s.wjListError) + ')' : ''}</div>`
+            : `<div class="inline-error" style="margin-bottom:0;background:rgba(82,82,91,0.08);border-left-color:var(--dim);color:var(--muted);">Add a WebinarJam API key above to pick webinars from a dropdown. You can still enter them manually.</div>`
+        }
+        <div class="override-list" id="override-list"></div>
+        <button class="override-add-btn" id="override-add-btn">+ Add Override</button>
       </div>
     `;
 
@@ -991,6 +1290,157 @@
 
     const saveBtn = $('#wiz-save');
     if (saveBtn) saveBtn.addEventListener('click', saveClient);
+
+    // Per-webinar overrides
+    if (s.step === 2 || isEdit) {
+      renderOverrides();
+      const addBtn = $('#override-add-btn');
+      if (addBtn) addBtn.addEventListener('click', () => {
+        wizardState.overrides.push({
+          id: Math.random().toString(36).slice(2, 10),
+          label: '',
+          matchType: 'id',
+          matchValue: '',
+          workflowRegistration: '',
+          workflowAttended: '',
+          workflowNoShow: '',
+          workflowReplay: '',
+        });
+        renderOverrides();
+      });
+    }
+  }
+
+  // Render the override editor cards and bind their inputs.
+  // Called after renderWizard paints the shell. Re-rendered in place
+  // (not through full renderWizard) when adding/removing rows so the
+  // user doesn't lose focus on the input they're editing.
+  function renderOverrides() {
+    const wrap = $('#override-list');
+    if (!wrap) return;
+
+    const s = wizardState;
+    const wfOptions = (selectedId) => {
+      const items = [`<option value="">— Use default —</option>`];
+      for (const w of (s.workflows || [])) {
+        items.push(`<option value="${esc(w.id)}" ${w.id === selectedId ? 'selected' : ''}>${esc(w.name)}${w.status && w.status !== 'published' ? ' (' + esc(w.status) + ')' : ''}</option>`);
+      }
+      return items.join('');
+    };
+
+    if (s.overrides.length === 0) {
+      wrap.innerHTML = `<div style="color:var(--dim);font-size:11px;padding:8px 0;font-style:italic;">No overrides yet. Click "Add Override" to add one.</div>`;
+      return;
+    }
+
+    wrap.innerHTML = s.overrides.map((o, idx) => {
+      // If we have a WJ webinar list and matchType is "id", show a dropdown
+      // of webinars instead of free text. Otherwise use a text input.
+      const useWjPicker = s.wjWebinars && s.wjWebinars.length > 0 && o.matchType === 'id';
+      let matchValueHtml;
+      if (useWjPicker) {
+        const opts = [`<option value="">— Pick a webinar —</option>`];
+        for (const w of s.wjWebinars) {
+          const sel = String(w.id) === String(o.matchValue) ? 'selected' : '';
+          opts.push(`<option value="${esc(w.id)}" ${sel}>${esc(w.name)} · ${esc(w.platform)} (id: ${esc(w.id)})</option>`);
+        }
+        matchValueHtml = `<select class="override-match-value" data-idx="${idx}">${opts.join('')}</select>`;
+      } else {
+        const placeholder = o.matchType === 'id' ? 'Webinar ID (numeric)' : 'Exact webinar name';
+        matchValueHtml = `<input type="text" class="override-match-value" data-idx="${idx}" placeholder="${placeholder}" value="${esc(o.matchValue)}">`;
+      }
+
+      return `
+      <div class="override-card" data-idx="${idx}">
+        <div class="override-row">
+          <div class="field" style="margin-bottom:0;">
+            <label>Label <span class="hint">For your own reference, e.g. "JIT Webinar".</span></label>
+            <input type="text" class="override-label" data-idx="${idx}" value="${esc(o.label)}" placeholder="JIT Webinar / Daily 1:30pm">
+          </div>
+          <div class="field" style="margin-bottom:0;min-width:120px;">
+            <label>Match by</label>
+            <select class="override-match-type" data-idx="${idx}">
+              <option value="id"   ${o.matchType === 'id'   ? 'selected' : ''}>Webinar ID</option>
+              <option value="name" ${o.matchType === 'name' ? 'selected' : ''}>Webinar Name</option>
+            </select>
+          </div>
+          <button class="override-remove-btn" data-idx="${idx}">Remove</button>
+        </div>
+        <div class="field" style="margin-bottom:12px;">
+          <label>${o.matchType === 'id' ? 'Webinar' : 'Webinar Name'}</label>
+          ${matchValueHtml}
+        </div>
+        <div class="override-wf-grid">
+          <div class="field">
+            <label><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--blue);margin-right:6px;vertical-align:middle;opacity:0.85;"></span>Registration <span class="hint">Empty = use default.</span></label>
+            <select class="override-wf override-wf-registration" data-idx="${idx}">${wfOptions(o.workflowRegistration)}</select>
+          </div>
+          <div class="field">
+            <label><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:6px;vertical-align:middle;opacity:0.85;"></span>Attended <span class="hint">Empty = use default.</span></label>
+            <select class="override-wf override-wf-attended" data-idx="${idx}">${wfOptions(o.workflowAttended)}</select>
+          </div>
+          <div class="field">
+            <label><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--amber);margin-right:6px;vertical-align:middle;opacity:0.85;"></span>No Show <span class="hint">Empty = use default.</span></label>
+            <select class="override-wf override-wf-noShow" data-idx="${idx}">${wfOptions(o.workflowNoShow)}</select>
+          </div>
+          <div class="field">
+            <label><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--purple);margin-right:6px;vertical-align:middle;opacity:0.85;"></span>Replay <span class="hint">Empty = use default.</span></label>
+            <select class="override-wf override-wf-replay" data-idx="${idx}">${wfOptions(o.workflowReplay)}</select>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+
+    // Bind inputs
+    wrap.querySelectorAll('.override-label').forEach(el => {
+      el.addEventListener('input', e => {
+        const i = parseInt(e.target.dataset.idx);
+        wizardState.overrides[i].label = e.target.value;
+      });
+    });
+    wrap.querySelectorAll('.override-match-type').forEach(el => {
+      el.addEventListener('change', e => {
+        const i = parseInt(e.target.dataset.idx);
+        wizardState.overrides[i].matchType = e.target.value;
+        // Reset match value when switching types since dropdown options change
+        wizardState.overrides[i].matchValue = '';
+        renderOverrides();
+      });
+    });
+    wrap.querySelectorAll('.override-match-value').forEach(el => {
+      const evt = el.tagName === 'SELECT' ? 'change' : 'input';
+      el.addEventListener(evt, e => {
+        const i = parseInt(e.target.dataset.idx);
+        wizardState.overrides[i].matchValue = e.target.value;
+      });
+    });
+    wrap.querySelectorAll('.override-wf-registration').forEach(el => {
+      el.addEventListener('change', e => {
+        wizardState.overrides[parseInt(e.target.dataset.idx)].workflowRegistration = e.target.value;
+      });
+    });
+    wrap.querySelectorAll('.override-wf-attended').forEach(el => {
+      el.addEventListener('change', e => {
+        wizardState.overrides[parseInt(e.target.dataset.idx)].workflowAttended = e.target.value;
+      });
+    });
+    wrap.querySelectorAll('.override-wf-noShow').forEach(el => {
+      el.addEventListener('change', e => {
+        wizardState.overrides[parseInt(e.target.dataset.idx)].workflowNoShow = e.target.value;
+      });
+    });
+    wrap.querySelectorAll('.override-wf-replay').forEach(el => {
+      el.addEventListener('change', e => {
+        wizardState.overrides[parseInt(e.target.dataset.idx)].workflowReplay = e.target.value;
+      });
+    });
+    wrap.querySelectorAll('.override-remove-btn').forEach(el => {
+      el.addEventListener('click', e => {
+        const i = parseInt(e.target.dataset.idx);
+        wizardState.overrides.splice(i, 1);
+        renderOverrides();
+      });
+    });
   }
 
   async function verifyAndContinue() {
@@ -1011,6 +1461,25 @@
       wizardState.location  = result.location;
       wizardState.workflows = result.workflows || [];
       wizardState.step = 2;
+
+      // Also fetch WebinarJam/EverWebinar list if a key was provided.
+      // Non-blocking — fires in background while user is on step 2.
+      if (s.webinarJamApiKey && !/•/.test(s.webinarJamApiKey)) {
+        api('POST', '/api/wj/list', { apiKey: s.webinarJamApiKey })
+          .then(r => {
+            wizardState.wjWebinars = r.webinars || [];
+            wizardState.wjListError = null;
+            renderOverrides();   // re-render override picker with the loaded webinars
+            if (r.webinars && r.webinars.length > 0) {
+              toast(`Loaded ${r.webinars.length} webinar(s) from WebinarJam.`, 'success');
+            }
+          })
+          .catch(e => {
+            wizardState.wjListError = e.message;
+            renderOverrides();
+          });
+      }
+
       if (wizardState.workflows.length === 0) {
         toast('Connected, but no workflows found. You can enter IDs manually.', 'info');
       } else {
@@ -1032,6 +1501,20 @@
     $('#form-error').innerHTML = '';
     const s = wizardState;
 
+    // Strip out incomplete overrides — match value is required.
+    const cleanOverrides = (s.overrides || [])
+      .filter(o => o && o.matchValue && String(o.matchValue).trim())
+      .map(o => ({
+        id: o.id,
+        label: (o.label || '').trim(),
+        matchType: o.matchType === 'name' ? 'name' : 'id',
+        matchValue: String(o.matchValue).trim(),
+        workflowRegistration: o.workflowRegistration || null,
+        workflowAttended:     o.workflowAttended     || null,
+        workflowNoShow:       o.workflowNoShow       || null,
+        workflowReplay:       o.workflowReplay       || null,
+      }));
+
     const payload = {
       name:                 s.name,
       slug:                 s.slug,
@@ -1041,6 +1524,7 @@
       workflowAttended:     s.wf.attended.id     || null,
       workflowNoShow:       s.wf.noShow.id        || null,
       workflowReplay:       s.wf.replay.id        || null,
+      webinarOverrides:     cleanOverrides,
       webinarJamApiKey:     s.webinarJamApiKey    || null,
     };
 
@@ -1133,7 +1617,12 @@
 
       <div class="events-header">
         <span class="events-title">Recent Events · ${esc(client.name)}</span>
-        <div class="controls">
+        <div class="controls" style="flex-wrap:wrap;">
+          <span class="search-wrap">
+            <span class="search-icon">⌕</span>
+            <input type="text" class="search-input" id="event-search" placeholder="Search by email, name, webinar…" value="${esc(clientDetailSearch)}">
+            <span class="search-clear" id="event-search-clear">×</span>
+          </span>
           <span class="queue-pill" id="queue-pill" title="Jobs currently in the retry queue for this client"><span class="q-dot"></span><span id="queue-pill-text">queue 0</span></span>
           <button class="filter-btn active" data-filter="all" data-status="">All</button>
           <button class="filter-btn" data-filter="registration" data-status="">Register</button>
@@ -1201,6 +1690,25 @@
       });
     });
 
+    // Search input — debounced refresh
+    const searchEl = $('#event-search');
+    const clearEl  = $('#event-search-clear');
+    let searchDebounce = null;
+    if (searchEl) {
+      searchEl.addEventListener('input', e => {
+        clientDetailSearch = e.target.value;
+        clearTimeout(searchDebounce);
+        searchDebounce = setTimeout(refreshEvents, 200);
+      });
+    }
+    if (clearEl) {
+      clearEl.addEventListener('click', () => {
+        clientDetailSearch = '';
+        if (searchEl) searchEl.value = '';
+        refreshEvents();
+      });
+    }
+
     // Export CSV for this client
     $('#export-csv-btn').addEventListener('click', () => {
       const url = '/api/events/export?clientSlug=' + encodeURIComponent(slug);
@@ -1212,6 +1720,7 @@
         const params = new URLSearchParams({ clientSlug: slug });
         if (clientDetailFilter !== 'all') params.set('filter', clientDetailFilter);
         if (clientDetailStatus)           params.set('status', clientDetailStatus);
+        if (clientDetailSearch)           params.set('search', clientDetailSearch);
         const evts = await api('GET', '/api/events?' + params.toString());
         renderEventList(evts);
       } catch (e) { /* silent */ }
@@ -1234,26 +1743,28 @@
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // Event list renderer
+  // Event list renderer — Zapier-style visual run history
   // ═══════════════════════════════════════════════════════════════
   function renderEventList(evts) {
     const list = $('#event-list');
     if (!list) return;
     if (!evts || evts.length === 0) {
-      list.innerHTML = '<div class="event-empty">No events yet. Fire a webhook from WebinarJam to test.</div>';
+      list.innerHTML = '<div class="event-empty">No events match your filters.</div>';
       return;
     }
     list.innerHTML = evts.map(e => {
       const kindClass = (e.kind || 'unknown').toLowerCase();
       const statusClass = e.status || 'ok';
       const isExpanded = expanded.has(e.id);
-      const payloadStr = JSON.stringify(e.payload || {}, null, 2);
       const attemptsLabel = e.attempts && e.attempts > 1 ? ` · try ${e.attempts}` : '';
+      const overrideBadge = e.pipeline?.override?.label
+        ? `<span class="override-badge" title="Per-webinar override matched: ${esc(e.pipeline.override.matchType)}=${esc(e.pipeline.override.matchValue)}">${esc(e.pipeline.override.label)}</span>`
+        : '';
       return `
         <div class="event ${isExpanded ? 'expanded' : ''}" data-id="${e.id}">
           <div class="event-row">
             <div class="event-time">${fmtTime(e.timestamp)}</div>
-            <div class="event-kind ${kindClass}">${(e.kind || 'unknown').replace('_', ' ')}</div>
+            <div class="event-kind ${kindClass}">${(e.kind || 'unknown').replace('_', ' ')}${overrideBadge}</div>
             <div class="event-who">
               <div class="event-name">${esc(e.name)}</div>
               <div class="event-email">${esc(e.email)}</div>
@@ -1266,11 +1777,9 @@
             <div class="event-detail-inner">
               ${e.message ? `<div class="event-message">${esc(e.message)}</div>` : ''}
               ${e.status === 'error' ? `<button class="event-retry-btn" data-retry-id="${e.id}">↻ Retry now</button>` : ''}
-              <pre>trigger : ${esc(e.trigger || '')}
-client  : ${esc(e.clientSlug)}
-attempts: ${e.attempts ?? 0}
-${e.retryOf ? 'retryOf : ' + esc(e.retryOf) + '\n' : ''}
-${esc(payloadStr)}</pre>
+              ${renderPipeline(e)}
+              <span class="raw-toggle" data-event-id="${e.id}">Show raw webhook payload ▾</span>
+              <pre class="raw-payload" data-event-id="${e.id}" style="display:none;margin-top:10px;">${esc(JSON.stringify(e.payload || {}, null, 2))}</pre>
             </div>
           </div>
         </div>
@@ -1302,6 +1811,207 @@ ${esc(payloadStr)}</pre>
         }
       });
     });
+
+    // Pipeline step expand/collapse
+    list.querySelectorAll('.run-step-header').forEach(h => {
+      h.addEventListener('click', ev => {
+        ev.stopPropagation();
+        const card = h.parentElement;
+        card.classList.toggle('open');
+      });
+    });
+
+    // Raw payload toggle
+    list.querySelectorAll('.raw-toggle').forEach(t => {
+      t.addEventListener('click', ev => {
+        ev.stopPropagation();
+        const id  = t.dataset.eventId;
+        const pre = list.querySelector(`.raw-payload[data-event-id="${id}"]`);
+        if (!pre) return;
+        const isOpen = pre.style.display !== 'none';
+        pre.style.display = isOpen ? 'none' : 'block';
+        t.textContent = isOpen ? 'Show raw webhook payload ▾' : 'Hide raw webhook payload ▴';
+      });
+    });
+  }
+
+  // Render the per-event pipeline (Zapier-style step cards). Tolerates
+  // events with no pipeline yet (queued / pre-feature events).
+  function renderPipeline(e) {
+    const p = e.pipeline;
+    const status = e.status || 'ok';
+    const lead = e.payload?.lead || {};
+
+    // No pipeline yet (queued, or older event)
+    if (!p) {
+      if (status === 'queued') {
+        return `
+          <div class="run-pipeline">
+            <div class="run-step open">
+              <div class="run-step-header">
+                <span class="run-step-icon skip">⏳</span>
+                <span class="run-step-name">Pending</span>
+                <span class="run-step-summary">Job is queued — will process within a few seconds</span>
+              </div>
+              <div class="run-step-body">
+                <div class="run-step-body-inner">
+                  ${kvGrid([
+                    ['contact',  `${lead.first_name || ''} ${lead.last_name || ''} <${lead.email || ''}>`],
+                    ['phone',    lead.phone_number || ''],
+                    ['webinar',  e.webinarName || ''],
+                    ['trigger',  e.trigger || ''],
+                  ])}
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+      return '';   // older events fall through to raw payload below
+    }
+
+    const steps = Array.isArray(p.steps) ? p.steps : [];
+    const cards = [];
+
+    for (const s of steps) {
+      cards.push(stepCard(s));
+    }
+
+    if (cards.length === 0) return '';
+
+    return `<div class="run-pipeline">${cards.join('<div class="pipeline-arrow">↓</div>')}</div>`;
+  }
+
+  // Render one step card.
+  function stepCard(s) {
+    const ok = s.ok === true;
+    const skipped = s.skipped === true;
+    const failed = s.ok === false;
+    const iconClass = skipped ? 'skip' : (ok ? 'ok' : 'fail');
+    const iconChar  = skipped ? '−' : (ok ? '✓' : '✗');
+
+    const titles = {
+      normalize_webhook: 'Webhook received',
+      api_enrichment:    'WebinarJam API enrichment',
+      resolve_workflows: 'Workflow routing',
+      ghl_contact:       'GHL Contact',
+      ghl_workflow:      'Workflow enrollment',
+    };
+    const title = titles[s.name] || s.name;
+
+    let summary = '';
+    let body = '';
+
+    const out = s.output || {};
+
+    if (s.name === 'normalize_webhook') {
+      const fullName = `${out.firstName || ''} ${out.lastName || ''}`.trim();
+      summary = `${fullName || out.email || '?'} · ${out.webinarName || '—'}`;
+      body = kvGrid([
+        ['name',     fullName],
+        ['email',    out.email],
+        ['phone',    out.phone],
+        ['webinar id',   out.webinarId],
+        ['webinar name', out.webinarName],
+        ['live link',    out.liveRoomLink],
+        ['replay link',  out.replayRoomLink],
+      ]);
+    } else if (s.name === 'api_enrichment') {
+      if (skipped || failed) {
+        summary = s.message || 'Skipped';
+        body = `<div style="color:var(--muted);font-size:11px;">${esc(s.message || 'No details')}</div>`;
+      } else {
+        summary = `${out.platform || 'Unknown'} · ${out.scheduledDate || ''} ${out.scheduledTime || ''}`.trim();
+        body = kvGrid([
+          ['platform',           out.platform],
+          ['scheduled date',     out.scheduledDate],
+          ['scheduled time',     out.scheduledTime],
+          ['registered at',      out.registeredAt],
+          ['attended live',      attendedLabel(out.attendedLive)],
+          ['time watched (min)', out.timeWatchedMins],
+          ['attended replay',    out.attendedReplay === 1 ? 'Yes' : (out.attendedReplay === 0 ? 'No' : '')],
+          ['time on replay (min)', out.timeReplayMins],
+          ['date live',          out.dateLive],
+          ['date replay',        out.dateReplay],
+        ]);
+      }
+    } else if (s.name === 'resolve_workflows') {
+      if (out.override) {
+        summary = `Override matched: ${out.override.label}`;
+        body = kvGrid([
+          ['override label', out.override.label],
+          ['match type',     out.override.matchType],
+          ['match value',    out.override.matchValue],
+          ['→ registration', out.registration || '(default)'],
+          ['→ attended',     out.attended || '(default)'],
+          ['→ no show',      out.noShow || '(default)'],
+          ['→ replay',       out.replay || '(default)'],
+        ]);
+      } else {
+        summary = 'Using client default workflows';
+        body = kvGrid([
+          ['→ registration', out.registration],
+          ['→ attended',     out.attended],
+          ['→ no show',      out.noShow],
+          ['→ replay',       out.replay],
+        ]);
+      }
+    } else if (s.name === 'ghl_contact') {
+      const actionVerb = {
+        created:   'Created new contact',
+        updated:   'Updated existing contact',
+        recovered: 'Recovered duplicate contact',
+      }[out.action] || out.action || '';
+      summary = `${actionVerb} · ${out.contactId || ''}`;
+      body = kvGrid([
+        ['action',     actionVerb],
+        ['contact id', out.contactId],
+      ]);
+    } else if (s.name === 'ghl_workflow') {
+      if (skipped) {
+        summary = s.message || 'Skipped';
+        body = `<div style="color:var(--muted);font-size:11px;">${esc(s.message || 'Skipped')}</div>`;
+      } else if (failed) {
+        summary = 'Failed';
+        body = `<div style="color:var(--red);font-size:11px;">${esc(s.message || 'Failed')}</div>`;
+      } else {
+        summary = `Enrolled in ${out.workflowId || ''}`;
+        body = kvGrid([['workflow id', out.workflowId]]);
+      }
+    } else {
+      // Unknown step — fall back to a JSON dump
+      summary = s.message || (ok ? 'Done' : 'Failed');
+      body = `<pre style="font-size:11px;color:var(--muted);">${esc(JSON.stringify(s, null, 2))}</pre>`;
+    }
+
+    return `
+      <div class="run-step">
+        <div class="run-step-header">
+          <span class="run-step-icon ${iconClass}">${iconChar}</span>
+          <span class="run-step-name">${esc(title)}</span>
+          <span class="run-step-summary">${esc(summary)}</span>
+          <span class="run-step-toggle">▸</span>
+        </div>
+        <div class="run-step-body">
+          <div class="run-step-body-inner">${body}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function kvGrid(pairs) {
+    const rows = pairs.map(([k, v]) => {
+      const empty = v === undefined || v === null || v === '';
+      const cls = empty ? 'empty' : '';
+      return `<div class="k">${esc(k)}</div><div class="v ${cls}">${empty ? '' : esc(String(v))}</div>`;
+    }).join('');
+    return `<div class="kv-grid">${rows}</div>`;
+  }
+
+  function attendedLabel(v) {
+    if (v === 1) return 'Yes';
+    if (v === 2) return 'No';
+    return '';
   }
 
   // ═══════════════════════════════════════════════════════════════

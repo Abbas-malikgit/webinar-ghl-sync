@@ -218,12 +218,25 @@ async function hydrateCache() {
   for (const e of all.slice(0, RECENT_CACHE_SIZE)) recentCache.push(e);
   cacheHydrated = true;
 }
-export async function getRecent({ clientSlug, status, kind } = {}) {
+export async function getRecent({ clientSlug, status, kind, search } = {}) {
   if (!cacheHydrated) await hydrateCache();
   let out = recentCache;
   if (clientSlug) out = out.filter(e => e.clientSlug === clientSlug);
   if (status)     out = out.filter(e => (e.status || 'ok') === status);
   if (kind && kind !== 'all') out = out.filter(e => (e.kind || '').toLowerCase() === kind);
+  if (search) {
+    const q = String(search).toLowerCase().trim();
+    if (q) {
+      out = out.filter(e =>
+        (e.email || '').toLowerCase().includes(q) ||
+        (e.name || '').toLowerCase().includes(q) ||
+        (e.webinarName || '').toLowerCase().includes(q) ||
+        (e.message || '').toLowerCase().includes(q) ||
+        (e.clientName || '').toLowerCase().includes(q) ||
+        (e.clientSlug || '').toLowerCase().includes(q)
+      );
+    }
+  }
   return out.slice(0, 200);
 }
 
@@ -274,10 +287,12 @@ export async function exportCsv({ clientSlug } = {}) {
     // Source / attribution (sometimes in payload, otherwise from API)
     'source', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
 
-    // API enrichment fields (empty until WebinarJam API key is added per-client)
+    // API enrichment fields (filled when WebinarJam API key is set per-client)
+    'api_platform',
     'api_attended_live', 'api_time_watched_mins',
     'api_attended_replay', 'api_time_replay_mins',
     'api_date_live', 'api_date_replay', 'api_entered_live', 'api_signup_date',
+    'api_utm_source', 'api_utm_medium', 'api_utm_campaign',
   ];
 
   const lines = [headers.join(',')];
@@ -324,6 +339,7 @@ export async function exportCsv({ clientSlug } = {}) {
       utm_term:     pullPayload(p, 'utm_term')     || pullPayload(p, 'lead.utm_term'),
 
       // API enrichment — only present when api enrichment ran successfully
+      api_platform:         e.apiPlatform,
       api_attended_live:    e.apiAttendedLive,
       api_time_watched_mins: e.apiTimeWatchedMins,
       api_attended_replay:  e.apiAttendedReplay,
@@ -332,6 +348,9 @@ export async function exportCsv({ clientSlug } = {}) {
       api_date_replay:      e.apiDateReplay,
       api_entered_live:     e.apiEnteredLive,
       api_signup_date:      e.apiSignupDate,
+      api_utm_source:       e.apiUtmSource,
+      api_utm_medium:       e.apiUtmMedium,
+      api_utm_campaign:     e.apiUtmCampaign,
     };
 
     lines.push(headers.map(h => csvEscape(row[h])).join(','));

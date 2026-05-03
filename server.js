@@ -9,6 +9,7 @@ import * as store from './src/clients.js';
 import * as events from './src/events.js';
 import * as queue from './src/queue.js';
 import { getLocation, listWorkflows } from './src/ghl.js';
+import { listWebinars } from './src/webinarjam.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -128,6 +129,7 @@ app.post('/api/clients', (req, res) => {
     const {
       name, slug, ghlApiKey, ghlLocationId,
       workflowRegistration, workflowAttended, workflowNoShow, workflowReplay,
+      webinarOverrides,
       webinarJamApiKey,
     } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
@@ -136,6 +138,7 @@ app.post('/api/clients', (req, res) => {
     const client = store.createClient({
       name, slug, ghlApiKey, ghlLocationId,
       workflowRegistration, workflowAttended, workflowNoShow, workflowReplay,
+      webinarOverrides,
       webinarJamApiKey,
     });
     res.json({ ...store.redactClient(client), stats: { registrations: 0, attended: 0, noShows: 0, replays: 0, unhandled: 0, errors: 0 } });
@@ -186,15 +189,28 @@ app.post('/api/ghl/verify', async (req, res) => {
   }
 });
 
+// ─── WJ/EW introspection — list webinars for the override picker ─
+app.post('/api/wj/list', async (req, res) => {
+  const { apiKey } = req.body;
+  if (!apiKey) return res.status(400).json({ error: 'apiKey required' });
+  try {
+    const webinars = await listWebinars(apiKey);
+    res.json({ webinars });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 // ─── Events ─────────────────────────────────────────────────────
 // Recent (fast, in-memory cache) — used by dashboard live refresh
 app.get('/api/events', async (req, res) => {
   try {
-    const { clientSlug, status, filter } = req.query;
+    const { clientSlug, status, filter, search } = req.query;
     const out = await events.getRecent({
       clientSlug,
       status,
       kind: filter,
+      search,
     });
     res.json(out);
   } catch (e) {
