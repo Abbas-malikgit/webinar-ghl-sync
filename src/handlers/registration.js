@@ -26,12 +26,17 @@ export async function handleRegistration(client, raw) {
   });
 
   console.log('📡 Fetching registrant from API...');
-  const reg = await fetchRegistrantData(client.webinarJamApiKey, data.webinarName, data.email);
+  // Pass the webinar ref object — id is preferred over name
+  const reg = await fetchRegistrantData(
+    client.webinarJamApiKey,
+    { id: data.webinarId, name: data.webinarName },
+    data.email
+  );
 
   if (reg) {
     if (reg.platform)       data.webinarType = reg.platform;
-    data.scheduledDate = reg.scheduledDate;
-    data.scheduledTime = reg.scheduledTime;
+    if (reg.scheduledDate)  data.scheduledDate = reg.scheduledDate;
+    if (reg.scheduledTime)  data.scheduledTime = reg.scheduledTime;
     if (reg.registeredAt)   data.registeredAt   = reg.registeredAt;
     if (reg.liveRoomLink)   data.liveRoomLink   = reg.liveRoomLink;
     if (reg.replayRoomLink) data.replayRoomLink = reg.replayRoomLink;
@@ -47,16 +52,25 @@ export async function handleRegistration(client, raw) {
       },
     });
   } else {
-    const now = new Date();
-    data.scheduledDate = now.toISOString().split('T')[0];
-    data.scheduledTime = now.toLocaleTimeString('en-US', {
-      hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/New_York'
-    }) + ' ET';
+    // No fake fallback! We previously wrote today's wall-clock time into
+    // `scheduledDate` / `scheduledTime` which silently produced misleading
+    // data in GHL ("Webinar Date: today" even when there was no real session).
+    // Better to leave those fields empty so workflows can detect the missing
+    // value and the GHL contact's "Webinar Date" stays blank rather than wrong.
+    //
+    // We DO still record the registration date — that's just "now" and is
+    // unambiguously correct because the webhook just arrived.
+    data.scheduledDate = '';
+    data.scheduledTime = '';
+    data.webinarType   = 'Unknown';   // explicit — was already the default
+
     pipeline.steps.push({
       name: 'api_enrichment', ok: false,
-      message: client.webinarJamApiKey ? 'Registrant not found in WJ/EW API' : 'No WebinarJam API key configured',
+      message: client.webinarJamApiKey
+        ? 'Registrant not found in WJ/EW API — webinar date/time fields will be left blank'
+        : 'No WebinarJam API key configured',
     });
-    console.warn('⚠️  API unavailable — using current time as fallback');
+    console.warn('⚠️  API enrichment failed — leaving webinar date/time fields blank (no fake fallback)');
   }
 
   // Resolve which workflow to use — checks per-webinar overrides first
@@ -79,7 +93,7 @@ export async function handleRegistration(client, raw) {
 
   console.log(`   ${data.firstName} ${data.lastName} <${data.email}>`);
   console.log(`   Phone   : ${data.phone}`);
-  console.log(`   Session : ${data.scheduledDate} ${data.scheduledTime}`);
+  console.log(`   Session : ${data.scheduledDate || '(blank)'} ${data.scheduledTime || ''}`);
   if (workflows.override) console.log(`   Override: ${workflows.override.label}`);
 
   const { contact, action } = await findOrCreateContact(client, data);

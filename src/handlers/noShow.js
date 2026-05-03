@@ -26,7 +26,7 @@ export async function handleNoShow(client, raw) {
     },
   });
 
-  const reg = await fetchRegistrantData(client.webinarJamApiKey, data.webinarName, data.email);
+  const reg = await fetchRegistrantData(client.webinarJamApiKey, { id: data.webinarId, name: data.webinarName }, data.email);
   if (reg) {
     if (reg.platform)      data.webinarType   = reg.platform;
     data.replayWatched = reg.attendedReplay === 1;
@@ -116,7 +116,7 @@ export async function handleReplayWatched(client, raw) {
     },
   });
 
-  const reg = await fetchRegistrantData(client.webinarJamApiKey, data.webinarName, data.email);
+  const reg = await fetchRegistrantData(client.webinarJamApiKey, { id: data.webinarId, name: data.webinarName }, data.email);
   if (reg) {
     if (reg.platform)       data.webinarType    = reg.platform;
     if (reg.scheduledDate)  data.scheduledDate  = reg.scheduledDate;

@@ -24,7 +24,11 @@ export async function handleAttendance(client, raw) {
   });
 
   console.log('📡 Fetching attendance data from API...');
-  const reg = await fetchRegistrantData(client.webinarJamApiKey, data.webinarName, data.email);
+  const reg = await fetchRegistrantData(
+    client.webinarJamApiKey,
+    { id: data.webinarId, name: data.webinarName },
+    data.email
+  );
 
   if (reg) {
     if (reg.platform)       data.webinarType    = reg.platform;

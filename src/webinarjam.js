@@ -37,9 +37,27 @@ export async function listWebinars(apiKey) {
   return out;
 }
 
-async function getApiWebinarId(apiKey, webinarName) {
-  const cacheKey = `${apiKey}::${webinarName}`;
+// Resolve which platform (WJ or EW) and api webinar_id to use.
+// Strategy:
+//   1. If we have a webhook-supplied webinar.id, probe BOTH platforms to
+//      find the one where that ID exists. ID is canonical and matches
+//      what the registrant API expects, so we trust it over name.
+//   2. Else fall back to exact-name lookup (legacy path).
+//
+// Caches by `${apiKey}::${platformProbeKey}` to avoid repeated /webinars hits.
+async function getApiWebinarId(apiKey, webinarRef) {
+  // webinarRef = { id, name } — id is preferred, name is fallback
+  const wantedId   = String(webinarRef?.id   || '').trim();
+  const wantedName = (webinarRef?.name || '').trim();
+
+  if (!wantedId && !wantedName) return null;
+
+  const cacheKey = `${apiKey}::${wantedId || 'name:' + wantedName}`;
   if (webinarIdCache.has(cacheKey)) return webinarIdCache.get(cacheKey);
+
+  // Probe each platform in turn. We always want the ID match first;
+  // only if no ID match is found (or we have no ID) do we accept name match.
+  let nameMatch = null;  // remember as fallback if no ID match found anywhere
 
   for (const base of [EW_BASE, WJ_BASE]) {
     try {
@@ -52,31 +70,56 @@ async function getApiWebinarId(apiKey, webinarName) {
       if (data?.status !== 'success') continue;
 
       const webinars = data?.webinars || [];
-      const match = webinars.find(w => w.name === webinarName);
-      if (match) {
-        const platform = base === EW_BASE ? 'EverWebinar' : 'WebinarJam';
-        const result = { base, apiId: match.webinar_id, platform };
-        webinarIdCache.set(cacheKey, result);
-        console.log(`   Resolved ${platform} webinar_id: ${match.webinar_id} for "${webinarName}"`);
-        return result;
+      const platform = base === EW_BASE ? 'EverWebinar' : 'WebinarJam';
+
+      // Prefer ID match
+      if (wantedId) {
+        const idHit = webinars.find(w => String(w.webinar_id) === wantedId);
+        if (idHit) {
+          const result = { base, apiId: idHit.webinar_id, platform, matchedBy: 'id' };
+          webinarIdCache.set(cacheKey, result);
+          console.log(`   Resolved ${platform} webinar_id: ${idHit.webinar_id} (matched by ID from webhook)`);
+          return result;
+        }
+      }
+
+      // Remember name match in case nothing matches by ID across platforms
+      if (!nameMatch && wantedName) {
+        const nameHit = webinars.find(w => w.name === wantedName);
+        if (nameHit) {
+          nameMatch = { base, apiId: nameHit.webinar_id, platform, matchedBy: 'name' };
+        }
       }
     } catch (e) {
       console.warn(`   ${base} lookup failed:`, e.message);
     }
   }
 
-  console.warn('⚠️  Webinar not found in either WJ or EW:', webinarName);
+  if (nameMatch) {
+    webinarIdCache.set(cacheKey, nameMatch);
+    console.log(`   Resolved ${nameMatch.platform} webinar_id: ${nameMatch.apiId} (matched by name "${wantedName}" — no ID match)`);
+    return nameMatch;
+  }
+
+  console.warn(`⚠️  Webinar not found in either WJ or EW (id=${wantedId || '∅'}, name=${wantedName || '∅'})`);
   return null;
 }
 
-export async function fetchRegistrantData(apiKey, webinarName, email) {
+// Now accepts a webinarRef object { id, name } instead of just a name.
+// id is preferred (canonical, no ambiguity); name is the fallback.
+export async function fetchRegistrantData(apiKey, webinarRef, email) {
   if (!apiKey) {
     console.warn('⚠️  No WebinarJam API key for this client — skipping API enrichment');
     return null;
   }
 
+  // Backwards compat: if a string was passed, treat it as a name
+  const ref = typeof webinarRef === 'string'
+    ? { id: '', name: webinarRef }
+    : (webinarRef || {});
+
   try {
-    const resolved = await getApiWebinarId(apiKey, webinarName);
+    const resolved = await getApiWebinarId(apiKey, ref);
     if (!resolved) return null;
     const { base, apiId, platform } = resolved;
 
