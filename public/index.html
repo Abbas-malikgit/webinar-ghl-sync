@@ -794,7 +794,9 @@
     location: null, workflows: [],
     wjWebinars: [],          // populated from /api/wj/list when WJ key provided
     wjListError: null,       // optional error message from WJ list call
-    overrides: [],           // [{ id, label, matchType: 'id'|'name', matchValue, workflowRegistration, workflowAttended, workflowNoShow, workflowReplay }]
+    overrides: [],           // [{ id, label, matchType, matchValue, scheduleId, scheduleLabel, workflow* }]
+    scheduleCache: {},       // { webinarId: [{ id, comment, date }] } — lazy-loaded per webinar
+    scheduleLoading: {},     // { webinarId: true } — request in-flight flag
     wf: {
       registration: { mode: 'select', id: '' },
       attended:     { mode: 'select', id: '' },
@@ -1042,6 +1044,7 @@
       step: 1, name: '', slug: '', ghlApiKey: '', ghlLocationId: '', webinarJamApiKey: '',
       location: null, workflows: [],
       wjWebinars: [], wjListError: null,
+      scheduleCache: {}, scheduleLoading: {},
       overrides: [],
       wf: {
         registration: { mode: 'select', id: '' },
@@ -1060,6 +1063,7 @@
       step: 2, name: '', slug: '', ghlApiKey: '', ghlLocationId: '', webinarJamApiKey: '',
       location: null, workflows: [],
       wjWebinars: [], wjListError: null,
+      scheduleCache: {}, scheduleLoading: {},
       overrides: [],
       wf: {
         registration: { mode: 'select', id: '' },
@@ -1092,6 +1096,8 @@
         label: o.label || '',
         matchType: o.matchType || 'id',
         matchValue: o.matchValue || '',
+        scheduleId:    o.scheduleId    || '',
+        scheduleLabel: o.scheduleLabel || '',
         workflowRegistration: o.workflowRegistration || '',
         workflowAttended:     o.workflowAttended     || '',
         workflowNoShow:       o.workflowNoShow       || '',
@@ -1301,6 +1307,8 @@
           label: '',
           matchType: 'id',
           matchValue: '',
+          scheduleId: '',
+          scheduleLabel: '',
           workflowRegistration: '',
           workflowAttended: '',
           workflowNoShow: '',
@@ -1327,6 +1335,90 @@
       }
       return items.join('');
     };
+
+    // Lazy-fetch the schedules for a webinar if not already cached. Triggers
+    // a re-render once the schedules arrive so the dropdown populates.
+    function ensureSchedulesLoaded(webinarId) {
+      if (!webinarId || !s.webinarJamApiKey) return;
+      if (s.scheduleCache[webinarId]) return;       // already loaded
+      if (s.scheduleLoading[webinarId]) return;     // already in flight
+      s.scheduleLoading[webinarId] = true;
+      api('POST', '/api/wj/webinar', { apiKey: s.webinarJamApiKey, webinarId })
+        .then(details => {
+          s.scheduleCache[webinarId] = details?.schedules || [];
+          s.scheduleLoading[webinarId] = false;
+          renderOverrides();
+        })
+        .catch(err => {
+          s.scheduleCache[webinarId] = [];          // mark as "tried, empty"
+          s.scheduleLoading[webinarId] = false;
+          console.warn('Schedule load failed for webinar', webinarId, err.message);
+          renderOverrides();
+        });
+    }
+
+    // Render the schedule picker for one override row. Only meaningful when
+    // matchType=id and a webinar is selected. For matchType=name (we don't
+    // have an ID to query), or when API enrichment isn't available, we show
+    // a manual text input the user can paste a numeric schedule ID into.
+    function scheduleHtml(o, idx) {
+      // For name-match overrides we can't auto-fetch schedules — show manual input
+      if (o.matchType !== 'id') {
+        return `
+        <div class="field" style="margin-bottom:12px;">
+          <label>Schedule ID <span class="hint">Optional. Numeric. Leave blank to match all sessions of this webinar.</span></label>
+          <input type="text" class="override-schedule-id" data-idx="${idx}" placeholder="e.g. 55" value="${esc(o.scheduleId || '')}">
+        </div>`;
+      }
+
+      const webinarId = String(o.matchValue || '');
+      if (!webinarId) {
+        // No webinar selected yet — show a hint, no input
+        return `
+        <div class="field" style="margin-bottom:12px;">
+          <label>Schedule <span class="hint">Pick a webinar above first, then choose a session.</span></label>
+          <select class="override-schedule-select" data-idx="${idx}" disabled>
+            <option>— Pick a webinar first —</option>
+          </select>
+        </div>`;
+      }
+
+      // We have a webinar ID; ensure its schedules are loaded
+      ensureSchedulesLoaded(webinarId);
+      const loading   = s.scheduleLoading[webinarId];
+      const schedules = s.scheduleCache[webinarId];
+
+      if (loading || schedules === undefined) {
+        return `
+        <div class="field" style="margin-bottom:12px;">
+          <label>Schedule</label>
+          <select class="override-schedule-select" data-idx="${idx}" disabled>
+            <option>Loading schedules…</option>
+          </select>
+        </div>`;
+      }
+
+      if (!schedules.length) {
+        // API returned no schedules (or call failed) — fall back to manual ID
+        return `
+        <div class="field" style="margin-bottom:12px;">
+          <label>Schedule ID <span class="hint">Couldn't load schedules — enter the numeric ID manually if you have it. Leave blank to match all sessions.</span></label>
+          <input type="text" class="override-schedule-id" data-idx="${idx}" placeholder="e.g. 55" value="${esc(o.scheduleId || '')}">
+        </div>`;
+      }
+
+      const opts = [`<option value="">— All schedules —</option>`];
+      for (const sch of schedules) {
+        const sel = String(sch.id) === String(o.scheduleId || '') ? 'selected' : '';
+        const lbl = sch.comment || sch.date || ('Schedule ' + sch.id);
+        opts.push(`<option value="${esc(sch.id)}" data-label="${esc(lbl)}" ${sel}>${esc(lbl)}${sch.date ? ' · ' + esc(sch.date) : ''}</option>`);
+      }
+      return `
+      <div class="field" style="margin-bottom:12px;">
+        <label>Schedule <span class="hint">Pick a specific session, or "All schedules" to match every session of this webinar.</span></label>
+        <select class="override-schedule-select" data-idx="${idx}">${opts.join('')}</select>
+      </div>`;
+    }
 
     if (s.overrides.length === 0) {
       wrap.innerHTML = `<div style="color:var(--dim);font-size:11px;padding:8px 0;font-style:italic;">No overrides yet. Click "Add Override" to add one.</div>`;
@@ -1370,6 +1462,7 @@
           <label>${o.matchType === 'id' ? 'Webinar' : 'Webinar Name'}</label>
           ${matchValueHtml}
         </div>
+        ${scheduleHtml(o, idx)}
         <div class="override-wf-grid">
           <div class="field">
             <label><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--blue);margin-right:6px;vertical-align:middle;opacity:0.85;"></span>Registration <span class="hint">Empty = use default.</span></label>
@@ -1402,16 +1495,48 @@
       el.addEventListener('change', e => {
         const i = parseInt(e.target.dataset.idx);
         wizardState.overrides[i].matchType = e.target.value;
-        // Reset match value when switching types since dropdown options change
+        // Reset match value AND scheduleId when switching match type — the
+        // dropdown options change and the previous schedule is no longer valid.
         wizardState.overrides[i].matchValue = '';
+        wizardState.overrides[i].scheduleId = '';
+        wizardState.overrides[i].scheduleLabel = '';
         renderOverrides();
       });
     });
     wrap.querySelectorAll('.override-match-value').forEach(el => {
-      const evt = el.tagName === 'SELECT' ? 'change' : 'input';
+      const isSelect = el.tagName === 'SELECT';
+      const evt = isSelect ? 'change' : 'input';
       el.addEventListener(evt, e => {
         const i = parseInt(e.target.dataset.idx);
+        const prev = wizardState.overrides[i].matchValue;
         wizardState.overrides[i].matchValue = e.target.value;
+        // If the user switched to a different webinar, clear the schedule —
+        // schedules from the old webinar don't apply to the new one.
+        if (prev !== e.target.value) {
+          wizardState.overrides[i].scheduleId    = '';
+          wizardState.overrides[i].scheduleLabel = '';
+        }
+        // Only re-render on dropdown change. Re-rendering on every keystroke
+        // of the name text input would steal focus from the user.
+        if (isSelect) renderOverrides();
+      });
+    });
+    // Schedule dropdown (when we have the schedule list from the API)
+    wrap.querySelectorAll('.override-schedule-select').forEach(el => {
+      el.addEventListener('change', e => {
+        const i = parseInt(e.target.dataset.idx);
+        wizardState.overrides[i].scheduleId = e.target.value;
+        // Capture the label too so it survives across loads / saves
+        const opt = e.target.selectedOptions[0];
+        wizardState.overrides[i].scheduleLabel = (opt && opt.dataset.label) ? opt.dataset.label : '';
+      });
+    });
+    // Manual schedule ID input (fallback when API list isn't available)
+    wrap.querySelectorAll('.override-schedule-id').forEach(el => {
+      el.addEventListener('input', e => {
+        const i = parseInt(e.target.dataset.idx);
+        wizardState.overrides[i].scheduleId = e.target.value.trim();
+        // No reliable label for manually-entered IDs — leave it as-is
       });
     });
     wrap.querySelectorAll('.override-wf-registration').forEach(el => {
@@ -1509,6 +1634,8 @@
         label: (o.label || '').trim(),
         matchType: o.matchType === 'name' ? 'name' : 'id',
         matchValue: String(o.matchValue).trim(),
+        scheduleId:    (o.scheduleId    || '').toString().trim(),
+        scheduleLabel: (o.scheduleLabel || '').toString().trim(),
         workflowRegistration: o.workflowRegistration || null,
         workflowAttended:     o.workflowAttended     || null,
         workflowNoShow:       o.workflowNoShow       || null,

@@ -73,8 +73,9 @@ export async function handleRegistration(client, raw) {
     console.warn('⚠️  API enrichment failed — leaving webinar date/time fields blank (no fake fallback)');
   }
 
-  // Resolve which workflow to use — checks per-webinar overrides first
-  const workflows = resolveWorkflows(client, raw);
+  // Resolve which workflow to use — checks per-webinar overrides first.
+  // Pass `reg` (the API enrichment) so schedule-specific overrides can match.
+  const workflows = resolveWorkflows(client, raw, reg);
   pipeline.override = workflows.override ? {
     label: workflows.override.label,
     matchType: workflows.override.matchType,

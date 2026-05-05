@@ -1,68 +1,58 @@
 # What changed in this update
 
-Three fixes for the bugs surfaced by the Mandall test run.
+## Per-schedule workflow overrides
 
-## 1. Prefer webinar ID over name when calling the WJ/EW API
+**Use case:** One webinar with multiple schedules (e.g., "Just in time" + "Every day, 1:00 PM" running off the same EverWebinar config) → fire different workflows per schedule.
 
-**Bug:** Mandall's EW had multiple webinars with the same display name "May 2nd 8 AM - Ben / English". The webhook arrived with `webinar.id: 2`, but our code did `find(w => w.name === wantedName)` which returned the first match — `webinar_id: 12`. We then called `/registrants` against id 12 and EW correctly answered "registrant not found." Adrian was registered against id 2.
+The previous override system matched only by webinar ID/name. So if both schedules used the same webinar, they fired the same workflows. Now overrides can additionally pin to a specific schedule.
 
-**Fix:** `getApiWebinarId` in `src/webinarjam.js` now:
+### How it works
 
-1. If the webhook gave us a `webinar.id`, probes both EW and WJ to find the platform that has a webinar with that exact ID. ID is canonical and matches what `/registrants` expects, so no ambiguity.
-2. Only falls back to name match if no platform has the ID (or if the webhook didn't include one — legacy webhooks).
-3. Handler signature: `fetchRegistrantData(apiKey, { id, name }, email)`. The old `(apiKey, name, email)` form still works for backwards compatibility.
+EverWebinar's webhook payload only contains `webinar.id` and `webinar.name` — no schedule info. So we have to use API enrichment to know which schedule a registrant signed up for. Specifically:
 
-The webhook payload always has the canonical webinar ID — we were just throwing it away. Now we use it.
+1. **Webhook arrives** → handler runs API enrichment (`/everwebinar/registrants`) → that response includes `schedule` (an integer ID like 55 or 56)
+2. **Override matcher** now does a two-pass selection:
+   - **Pass 1:** find an override matching this webinar **and** with `scheduleId === reg.schedule`
+   - **Pass 2:** if no schedule-specific match, find an override matching this webinar with **no scheduleId set** (matches all schedules)
+   - **Fallback:** client-level defaults
+3. **Schedule-specific beats webinar-level**, so you can have a "Daily 1pm → workflow X" override AND a "(any other schedule) → workflow Y" fallback both on the same webinar.
 
-## 2. No more fake fallback dates in GHL
+### UI flow (Add/Edit Client → Per-Webinar Overrides)
 
-**Bug:** When API enrichment failed (which happens whenever the webinar has expired from EW's registrant index, or when the API key is missing), `registration.js` was writing today's wall-clock time into `scheduledDate` / `scheduledTime`:
+When the user picks a webinar in an override row:
+1. App calls `POST /api/wj/webinar` with that webinar's ID
+2. EW API responds with the schedules list including their integer IDs and comment labels ("Just in time", "Every day, 01:00 PM", etc.)
+3. Schedule dropdown populates with each schedule. "All schedules" option = leave scheduleId blank = matches every session of that webinar.
 
-```js
-const now = new Date();
-data.scheduledDate = now.toISOString().split('T')[0];     // "today"
-data.scheduledTime = now.toLocaleTimeString(...) + ' ET'; // "current time ET"
-```
+If the EW API call fails (network issue, expired schedule index, key missing), the picker falls back to a manual numeric input — you can paste the schedule ID directly if you know it from the EW dashboard URL or earlier API responses.
 
-That produced misleading data on the GHL contact — "Webinar Date: 2026-05-03" and "Webinar Time: 12:35 PM ET" looked legitimate but were actually the moment the webhook arrived, not the actual session time. Pretty bad — workflows reading those fields would happily send "see you at 12:35 PM today!" reminders that weren't grounded in any real schedule.
+### Constraint to know
 
-**Fix:** When API enrichment fails, those fields are now left **blank** in GHL. The `webinar_type` field stays "Unknown" too. Workflows can detect the missing value and branch accordingly. The contact's "Webinar Registered Date" still gets set (that's just `now`, which is unambiguously correct — the webhook just arrived).
-
-The pipeline's API enrichment step now reflects this clearly: "Registrant not found in WJ/EW API — webinar date/time fields will be left blank".
-
-## 3. Backward compat — same fix in attended/no-show/replay handlers
-
-Those handlers also use `fetchRegistrantData`. Updated all three to pass the webinar ref object (`{ id, name }`) instead of just the name. Same fix, same benefit.
-
-The attended/no-show/replay handlers never had the fake-fallback bug — their guards (`if (reg.scheduledDate) data.scheduledDate = reg.scheduledDate`) only wrote when API succeeded. So no behavior change there beyond the ID-preferred lookup.
-
----
-
-## Why your old contacts in GHL still show wrong dates
-
-Contacts that got created with the buggy fallback already have those wrong dates written into their custom fields. This patch only affects future events. If you want to clean up the old ones, options:
-
-1. **Manual sweep** — search GHL for contacts where `webinar_type = Unknown` and clear the date/time fields by hand (probably small enough number to be doable).
-2. **One-shot replay script** — I can write a Node script that reads through `events.jsonl`, finds events where API enrichment failed, and for each one PUTs an update to the GHL contact clearing those three fields. Let me know if you want that.
-
-For the Mandall registration that's stuck with `12:35 PM ET`, you can just edit the contact in GHL by hand for now and replay the next test webhook to confirm the fix works.
+**This only works for clients with a configured WebinarJam/EverWebinar API key.** Without the API call we can't read the registrant's schedule from the webhook (the webhook just doesn't contain it). For clients without a key, schedule-specific overrides will never match → falls through to webinar-level overrides → falls through to client defaults. So existing setups keep working unchanged.
 
 ---
 
 # Files touched
 
 ```
-src/webinarjam.js               — getApiWebinarId now ID-first, falls back to name
-                                  fetchRegistrantData accepts { id, name } object
-src/handlers/registration.js    — no fake fallback dates on enrichment failure
-src/handlers/attendance.js      — pass webinar ref object
-src/handlers/noShow.js          — pass webinar ref object (both noShow + replay handlers)
+src/webinarjam.js               — getWebinarDetails() (singular /webinar endpoint)
+                                  scheduleId extracted from registrant response
+                                  resolveWorkflows takes enrichment as 3rd arg
+                                  two-pass match: schedule-specific → webinar-level → defaults
+src/clients.js                  — normalizeOverrides accepts scheduleId + scheduleLabel
+src/handlers/registration.js    — passes reg to resolveWorkflows
+src/handlers/attendance.js      — same
+src/handlers/noShow.js          — same (both noShow and replay handlers)
+server.js                       — POST /api/wj/webinar endpoint
+public/index.html               — schedule picker per override row, lazy-loads schedules,
+                                  saves scheduleId/scheduleLabel in payload, resets
+                                  schedule when matchType or webinar changes
 ```
 
-Everything else from the previous update is unchanged. Same deploy:
+Same deploy:
 
 ```bash
 git add -A
-git commit -m "fix: prefer webinar id over name; remove fake fallback dates"
+git commit -m "feat: per-schedule workflow overrides (one webinar, different workflows per session)"
 git push
 ```

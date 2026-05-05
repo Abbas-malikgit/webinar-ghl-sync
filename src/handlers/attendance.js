@@ -59,7 +59,7 @@ export async function handleAttendance(client, raw) {
     console.warn('⚠️  API unavailable — marking attended from webhook');
   }
 
-  const workflows = resolveWorkflows(client, raw);
+  const workflows = resolveWorkflows(client, raw, reg);
   pipeline.override = workflows.override ? {
     label: workflows.override.label,
     matchType: workflows.override.matchType,

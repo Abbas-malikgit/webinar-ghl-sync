@@ -49,11 +49,17 @@ function normalizeOverrides(input) {
     const matchValue = (o.matchValue || '').trim();
     if (!matchValue) continue;  // empty match = drop
     const matchType = o.matchType === 'name' ? 'name' : 'id';
+    // scheduleId is optional. Empty string / null = match all schedules.
+    const scheduleId = (o.scheduleId !== undefined && o.scheduleId !== null && String(o.scheduleId).trim() !== '')
+      ? String(o.scheduleId).trim()
+      : '';
     out.push({
       id:                   o.id || randomBytes(8).toString('hex'),
       label:                (o.label || '').trim() || matchValue,
       matchType,
       matchValue,
+      scheduleId,                                          // NEW — empty = any schedule
+      scheduleLabel:        (o.scheduleLabel || '').trim(),// NEW — display only ("Just in time")
       workflowRegistration: o.workflowRegistration || null,
       workflowAttended:     o.workflowAttended     || null,
       workflowNoShow:       o.workflowNoShow       || null,

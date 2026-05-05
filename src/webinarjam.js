@@ -6,6 +6,53 @@ const EW_BASE = 'https://api.webinarjam.com/everwebinar';
 // ─── Per-client cache of resolved webinar IDs ────────────────
 const webinarIdCache = new Map();
 
+// ─── Fetch ONE webinar's schedules (with IDs and labels) ────────
+// The plural /webinars endpoint returns `schedules` as an array of strings
+// like "Just in time" / "Every day, 01:00 PM" — useless for matching.
+// The singular /webinar endpoint returns schedules as objects with the
+// integer `schedule` ID we actually need:
+//
+//   { date: "2024-01-05 12:00", schedule: 55, comment: "Just in time" }
+//
+// Tries EW first (singular endpoint is documented for EW), falls back to WJ.
+// Returns null if not found on either platform.
+export async function getWebinarDetails(apiKey, webinarId) {
+  if (!apiKey || !webinarId) return null;
+  for (const [base, platform] of [[EW_BASE, 'EverWebinar'], [WJ_BASE, 'WebinarJam']]) {
+    try {
+      const res = await fetch(`${base}/webinar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: apiKey, webinar_id: Number(webinarId) }),
+      });
+      const data = await res.json();
+      if (data?.status !== 'success' || !data?.webinar) continue;
+      const w = data.webinar;
+      // Normalize schedules — each entry has {date, schedule, comment}
+      const schedules = Array.isArray(w.schedules)
+        ? w.schedules
+            .filter(s => s && (s.schedule !== undefined && s.schedule !== null))
+            .map(s => ({
+              id:      String(s.schedule),     // canonical match value
+              comment: s.comment || '',         // human label ("Just in time")
+              date:    s.date    || '',         // when this session runs
+            }))
+        : [];
+      return {
+        id:       String(w.webinar_id),
+        name:     w.name,
+        title:    w.title || w.name,
+        platform,
+        schedules,
+        timezone: w.timezone || '',
+      };
+    } catch (e) {
+      console.warn(`getWebinarDetails: ${platform} call failed:`, e.message);
+    }
+  }
+  return null;
+}
+
 // ─── List ALL webinars for an API key (for the wizard) ────────
 // Hits both EverWebinar and WebinarJam. Tags each result with its
 // platform so the dashboard can show "JIT Webinar (EverWebinar)" etc.
@@ -193,10 +240,28 @@ export async function fetchRegistrantData(apiKey, webinarRef, email) {
     const timeWatchedMins = parseHMStoMins(reg.time_live);
     const timeReplayMins  = parseHMStoMins(reg.time_replay);
 
+    // Schedule ID — used by override matching to differentiate sessions of
+    // the same webinar (e.g., "Just in time" vs "Every day, 1pm"). EW's
+    // /registrant endpoint returns this as `schedule` (integer). We accept
+    // a few likely shapes for robustness.
+    let scheduleId = '';
+    if (reg.schedule !== undefined && reg.schedule !== null && reg.schedule !== '') {
+      // Could be int (55) or numeric string ("55"). If it's a date string
+      // ("Wednesday, May 7 2026, 8:00 AM"), it's not the ID — skip.
+      const s = reg.schedule;
+      if (typeof s === 'number') scheduleId = String(s);
+      else if (typeof s === 'string' && /^\d+$/.test(s.trim())) scheduleId = s.trim();
+    }
+    if (!scheduleId && reg.schedule_id !== undefined && reg.schedule_id !== null) {
+      scheduleId = String(reg.schedule_id);
+    }
+    if (scheduleId) console.log(`🎯 Schedule ID: ${scheduleId}`);
+
     return {
       platform,
       scheduledDate,
       scheduledTime,
+      scheduleId,                        // NEW — for per-schedule workflow overrides
       registeredAt,
       attendedLive,
       dateLive,
@@ -223,22 +288,51 @@ export async function fetchRegistrantData(apiKey, webinarRef, email) {
 // webinar.id (preferred) or webinar.name. Empty override fields fall
 // through to the client-level defaults.
 //
+// Schedule-specific overrides: if an override has `scheduleId` set, it
+// only matches when the API enrichment confirms the registrant signed up
+// for that specific schedule (e.g., "Just in time" vs "Every day, 1pm"
+// for the same webinar). Schedule-specific overrides take priority over
+// webinar-level overrides.
+//
 // Returns: { registration, attended, noShow, replay, override }
 //   - workflow IDs are resolved (override → default → null)
 //   - override is the matched override object, or null if no match
-export function resolveWorkflows(client, payload) {
+export function resolveWorkflows(client, payload, enrichment = null) {
   const webinarId   = String(payload?.webinar?.id   || '');
   const webinarName = (payload?.webinar?.name || '').toLowerCase();
+  const scheduleId  = String(enrichment?.scheduleId || '');
 
-  let override = null;
   const overrides = Array.isArray(client.webinarOverrides) ? client.webinarOverrides : [];
-  for (const o of overrides) {
-    if (!o || !o.matchValue) continue;
-    if (o.matchType === 'id' && webinarId && String(o.matchValue) === webinarId) {
-      override = o; break;
+
+  const matchesWebinar = (o) => {
+    if (!o || !o.matchValue) return false;
+    if (o.matchType === 'id'   && webinarId   && String(o.matchValue) === webinarId)   return true;
+    if (o.matchType === 'name' && webinarName && String(o.matchValue).toLowerCase() === webinarName) return true;
+    return false;
+  };
+
+  // Two-pass selection:
+  //   Pass 1 — schedule-specific overrides (most specific wins)
+  //   Pass 2 — webinar-only overrides (no scheduleId set) — applies to ALL
+  //            schedules of that webinar
+  // First match in each pass wins. Schedule-specific beats webinar-only.
+  let override = null;
+
+  if (scheduleId) {
+    for (const o of overrides) {
+      if (!matchesWebinar(o)) continue;
+      if (o.scheduleId && String(o.scheduleId) === scheduleId) {
+        override = o; break;
+      }
     }
-    if (o.matchType === 'name' && webinarName && String(o.matchValue).toLowerCase() === webinarName) {
-      override = o; break;
+  }
+
+  if (!override) {
+    for (const o of overrides) {
+      if (!matchesWebinar(o)) continue;
+      if (!o.scheduleId) {           // ← only webinar-level overrides
+        override = o; break;
+      }
     }
   }
 

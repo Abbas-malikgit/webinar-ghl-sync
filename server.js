@@ -9,7 +9,7 @@ import * as store from './src/clients.js';
 import * as events from './src/events.js';
 import * as queue from './src/queue.js';
 import { getLocation, listWorkflows } from './src/ghl.js';
-import { listWebinars } from './src/webinarjam.js';
+import { listWebinars, getWebinarDetails } from './src/webinarjam.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -196,6 +196,22 @@ app.post('/api/wj/list', async (req, res) => {
   try {
     const webinars = await listWebinars(apiKey);
     res.json({ webinars });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Fetch ONE webinar's schedules (with IDs and labels) — used when the
+// override picker needs to render a schedule dropdown after a webinar
+// is selected.
+app.post('/api/wj/webinar', async (req, res) => {
+  const { apiKey, webinarId } = req.body;
+  if (!apiKey)    return res.status(400).json({ error: 'apiKey required' });
+  if (!webinarId) return res.status(400).json({ error: 'webinarId required' });
+  try {
+    const details = await getWebinarDetails(apiKey, webinarId);
+    if (!details) return res.status(404).json({ error: 'webinar not found' });
+    res.json(details);
   } catch (e) {
     res.status(400).json({ error: e.message });
   }

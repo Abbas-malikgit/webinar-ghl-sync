@@ -49,7 +49,7 @@ export async function handleNoShow(client, raw) {
     });
   }
 
-  const workflows = resolveWorkflows(client, raw);
+  const workflows = resolveWorkflows(client, raw, reg);
   pipeline.override = workflows.override ? {
     label: workflows.override.label,
     matchType: workflows.override.matchType,
@@ -139,7 +139,7 @@ export async function handleReplayWatched(client, raw) {
     });
   }
 
-  const workflows = resolveWorkflows(client, raw);
+  const workflows = resolveWorkflows(client, raw, reg);
   pipeline.override = workflows.override ? {
     label: workflows.override.label,
     matchType: workflows.override.matchType,
