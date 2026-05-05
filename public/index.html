@@ -790,7 +790,7 @@
   let expanded = new Set();
   let wizardState = {
     step: 1,
-    name: '', slug: '', ghlApiKey: '', ghlLocationId: '', webinarJamApiKey: '',
+    name: '', slug: '', ghlApiKey: '', ghlLocationId: '', webinarJamApiKey: '', webinarEventTimezone: '',
     location: null, workflows: [],
     wjWebinars: [],          // populated from /api/wj/list when WJ key provided
     wjListError: null,       // optional error message from WJ list call
@@ -1041,7 +1041,7 @@
   // ═══════════════════════════════════════════════════════════════
   function renderAddClient() {
     wizardState = {
-      step: 1, name: '', slug: '', ghlApiKey: '', ghlLocationId: '', webinarJamApiKey: '',
+      step: 1, name: '', slug: '', ghlApiKey: '', ghlLocationId: '', webinarJamApiKey: '', webinarEventTimezone: '',
       location: null, workflows: [],
       wjWebinars: [], wjListError: null,
       scheduleCache: {}, scheduleLoading: {},
@@ -1060,7 +1060,7 @@
   function renderEditClient(slug) {
     editingSlug = slug;
     wizardState = {
-      step: 2, name: '', slug: '', ghlApiKey: '', ghlLocationId: '', webinarJamApiKey: '',
+      step: 2, name: '', slug: '', ghlApiKey: '', ghlLocationId: '', webinarJamApiKey: '', webinarEventTimezone: '',
       location: null, workflows: [],
       wjWebinars: [], wjListError: null,
       scheduleCache: {}, scheduleLoading: {},
@@ -1084,6 +1084,7 @@
       wizardState.ghlLocationId    = c.ghlLocationId;
       wizardState.ghlApiKey        = c.ghlApiKey;
       wizardState.webinarJamApiKey = c.webinarJamApiKey;
+      wizardState.webinarEventTimezone = c.webinarEventTimezone || '';
       wizardState.wf = {
         registration: { mode: 'select', id: c.workflowRegistration || '' },
         attended:     { mode: 'select', id: c.workflowAttended     || '' },
@@ -1158,6 +1159,10 @@
         <div class="field">
           <label>WebinarJam API Key <span class="hint">Optional — enables API enrichment (attendance times, session date).</span></label>
           <input type="text" id="f-wj-key" placeholder="xxxx-xxxx-xxxx" value="${esc(s.webinarJamApiKey)}">
+        </div>
+        <div class="field">
+          <label>Webinar Event Timezone <span class="hint">Optional — IANA timezone of the event times returned by the WJ/EW API (e.g. <code>Asia/Karachi</code>, <code>America/New_York</code>). Overrides the timezone from the webinar's own settings when computing "Event Time in EST". Leave blank to use the webinar's configured timezone.</span></label>
+          <input type="text" id="f-tz-override" placeholder="Asia/Karachi" value="${esc(s.webinarEventTimezone)}">
         </div>
       </div>
     `;
@@ -1252,6 +1257,7 @@
     bind('f-ghl-key', 'ghlApiKey');
     bind('f-ghl-loc', 'ghlLocationId');
     bind('f-wj-key', 'webinarJamApiKey');
+    bind('f-tz-override', 'webinarEventTimezone');
 
     // Auto-generate slug from name
     const nameEl = $('#f-name');
@@ -1653,6 +1659,7 @@
       workflowReplay:       s.wf.replay.id        || null,
       webinarOverrides:     cleanOverrides,
       webinarJamApiKey:     s.webinarJamApiKey    || null,
+      webinarEventTimezone: s.webinarEventTimezone || null,
     };
 
     $('#wiz-save').disabled = true;

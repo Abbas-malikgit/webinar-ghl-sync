@@ -113,6 +113,7 @@ export function createClient(data) {
     workflowReplay:       data.workflowReplay       || null,
     webinarOverrides:     normalizeOverrides(data.webinarOverrides),
     webinarJamApiKey:     data.webinarJamApiKey     || null,
+    webinarEventTimezone: data.webinarEventTimezone  || null,
     webhookToken:         genToken(),
     createdAt:            now,
     updatedAt:            now,
