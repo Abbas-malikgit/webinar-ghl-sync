@@ -31,6 +31,58 @@ function dateField(key, value) {
   return { key, field_value: d.toISOString().split('T')[0] };
 }
 
+// Converts scheduledDate (YYYY-MM-DD) + scheduledTime ("8:00 AM") from the
+// webinar's configured IANA timezone into EST, formatted as MM-DD-YYYY HH:MM AM/PM.
+// Uses the native Intl API — no extra dependencies needed.
+function convertToEST(dateStr, timeStr, webinarTimezone) {
+  if (!dateStr || !timeStr) return null;
+
+  const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return null;
+
+  let h = parseInt(match[1]);
+  const m = parseInt(match[2]);
+  const ap = match[3].toUpperCase();
+  if (ap === 'PM' && h !== 12) h += 12;
+  if (ap === 'AM' && h === 12) h = 0;
+
+  const [year, month, day] = dateStr.split('-').map(Number);
+  if (!year || !month || !day) return null;
+
+  let utcMs;
+
+  if (webinarTimezone) {
+    try {
+      // "Fake UTC" trick: treat the local time as UTC, then measure how far off
+      // the timezone makes it, and shift back to get the real UTC instant.
+      const fakeUTC = new Date(Date.UTC(year, month - 1, day, h, m));
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: webinarTimezone,
+        hour: '2-digit', minute: '2-digit', hour12: false,
+      }).formatToParts(fakeUTC).reduce((a, p) => { a[p.type] = p.value; return a; }, {});
+
+      const tzH = parseInt(parts.hour === '24' ? '0' : parts.hour);
+      const tzM = parseInt(parts.minute);
+      utcMs = fakeUTC.getTime() + (h - tzH) * 3600000 + (m - tzM) * 60000;
+    } catch {
+      // Unrecognised timezone string — fall back to treating the time as-is
+      console.warn(`⚠️  Unrecognised webinar timezone "${webinarTimezone}" — skipping conversion`);
+      utcMs = Date.UTC(year, month - 1, day, h, m);
+    }
+  } else {
+    // No timezone info at all — can't convert, skip the field
+    return null;
+  }
+
+  const estParts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    month: '2-digit', day: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: true,
+  }).formatToParts(new Date(utcMs)).reduce((a, p) => { a[p.type] = p.value; return a; }, {});
+
+  return `${estParts.month}-${estParts.day}-${estParts.year} ${estParts.hour}:${estParts.minute} ${estParts.dayPeriod}`;
+}
+
 function buildCustomFields(data) {
   const fields = [];
   const push = (item) => item && fields.push(item);
@@ -39,6 +91,10 @@ function buildCustomFields(data) {
   push(dateField(FIELDS.webinarDate,           data.scheduledDate));
   push(field(FIELDS.webinarTime, data.scheduledTime));
   push(field(FIELDS.webinarType, data.webinarType));
+
+  // Combined date+time in EST for GHL "Set Event Time" workflow action
+  const estFormatted = convertToEST(data.scheduledDate, data.scheduledTime, data.webinarTimezone);
+  push(field(FIELDS.eventTimeInEst, estFormatted));
 
   if (data.attended !== undefined)
     push(field(FIELDS.webinarAttended, data.attended ? 'Yes' : 'No'));

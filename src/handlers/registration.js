@@ -37,6 +37,7 @@ export async function handleRegistration(client, raw) {
     if (reg.platform)       data.webinarType = reg.platform;
     if (reg.scheduledDate)  data.scheduledDate = reg.scheduledDate;
     if (reg.scheduledTime)  data.scheduledTime = reg.scheduledTime;
+    if (reg.webinarTimezone) data.webinarTimezone = reg.webinarTimezone;
     if (reg.registeredAt)   data.registeredAt   = reg.registeredAt;
     if (reg.liveRoomLink)   data.liveRoomLink   = reg.liveRoomLink;
     if (reg.replayRoomLink) data.replayRoomLink = reg.replayRoomLink;

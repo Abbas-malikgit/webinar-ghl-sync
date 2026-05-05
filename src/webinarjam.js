@@ -170,6 +170,24 @@ export async function fetchRegistrantData(apiKey, webinarRef, email) {
     if (!resolved) return null;
     const { base, apiId, platform } = resolved;
 
+    // Fetch webinar timezone — needed to convert event time to EST.
+    // We already know the platform (base), so call it directly.
+    let webinarTimezone = '';
+    try {
+      const tzRes = await fetch(`${base}/webinar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: apiKey, webinar_id: Number(apiId) }),
+      });
+      const tzData = await tzRes.json();
+      if (tzData?.status === 'success' && tzData?.webinar?.timezone) {
+        webinarTimezone = tzData.webinar.timezone;
+        console.log(`🌍 Webinar timezone: ${webinarTimezone}`);
+      }
+    } catch (e) {
+      console.warn('⚠️  Could not fetch webinar timezone:', e.message);
+    }
+
     const res = await fetch(`${base}/registrants`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -261,6 +279,7 @@ export async function fetchRegistrantData(apiKey, webinarRef, email) {
       platform,
       scheduledDate,
       scheduledTime,
+      webinarTimezone,                   // IANA tz string e.g. "America/New_York"
       scheduleId,                        // NEW — for per-schedule workflow overrides
       registeredAt,
       attendedLive,

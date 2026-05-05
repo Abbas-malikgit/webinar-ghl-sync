@@ -30,8 +30,9 @@ export async function handleNoShow(client, raw) {
   if (reg) {
     if (reg.platform)      data.webinarType   = reg.platform;
     data.replayWatched = reg.attendedReplay === 1;
-    if (reg.scheduledDate) data.scheduledDate = reg.scheduledDate;
-    if (reg.scheduledTime) data.scheduledTime = reg.scheduledTime;
+    if (reg.scheduledDate)  data.scheduledDate  = reg.scheduledDate;
+    if (reg.scheduledTime)  data.scheduledTime  = reg.scheduledTime;
+    if (reg.webinarTimezone) data.webinarTimezone = reg.webinarTimezone;
 
     pipeline.apiEnrichment = reg;
     pipeline.steps.push({
@@ -121,6 +122,7 @@ export async function handleReplayWatched(client, raw) {
     if (reg.platform)       data.webinarType    = reg.platform;
     if (reg.scheduledDate)  data.scheduledDate  = reg.scheduledDate;
     if (reg.scheduledTime)  data.scheduledTime  = reg.scheduledTime;
+    if (reg.webinarTimezone) data.webinarTimezone = reg.webinarTimezone;
     if (reg.timeReplayMins) data.timeWatched    = reg.timeReplayMins;
 
     pipeline.apiEnrichment = reg;

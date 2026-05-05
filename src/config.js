@@ -24,10 +24,11 @@ export const config = {
 export const FIELDS = {
   webinarRegisteredDate:    'webinar_registered_date',  // Date — when they registered
   webinarDate:              'webinar_date',             // Date — scheduled session date
-  webinarTime:              'webinar_time',             // Text — scheduled session time
+  webinarTime:              'webinar_time',             // Text — scheduled session time (webinar's local TZ, for messages)
   webinarType:              'webinar_type',             // Text — "WebinarJam" / "EverWebinar" / "Unknown"
   webinarAttended:          'webinar_attended',         // Single Option Yes/No
   replayWatched:            'replay_watched',           // Text
   liveRoomLink:             'live_room_link',           // Text — per-registrant tokenized URL
   replayRoomLink:           'replay_room_link',         // Text — per-registrant tokenized URL
+  eventTimeInEst:           'event_time_in_est',        // Text — combined "MM-DD-YYYY HH:MM AM/PM" for GHL Set Event Time
 };
