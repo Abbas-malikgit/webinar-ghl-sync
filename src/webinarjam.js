@@ -239,6 +239,12 @@ export async function fetchRegistrantData(apiKey, webinarRef, email) {
     }
 
     console.log('✅ Registrant found:', reg.email);
+    // 🔬 DIAGNOSTIC — log all fields EW returns on the registrant object
+    // so we can find the correct timezone/IP field names. Remove once confirmed.
+    const diagFields = Object.fromEntries(
+      Object.entries(reg).filter(([, v]) => v !== null && v !== '' && v !== 0)
+    );
+    console.log('🔬 Registrant fields:', JSON.stringify(diagFields));
 
     let scheduledDate = '';
     let scheduledTime = '';
@@ -412,6 +418,9 @@ export function resolveWorkflows(client, payload, enrichment = null) {
 
 export function normalizePayload(raw) {
   const lead    = raw.lead    || {};
+  // 🔬 DIAGNOSTIC — log all fields EW sends in the webhook lead object
+  // so we can find the correct timezone field name. Remove once confirmed.
+  console.log('🔬 Webhook lead fields:', JSON.stringify(lead));
   const webinar = raw.webinar || {};
   const links   = raw.links   || {};
 
