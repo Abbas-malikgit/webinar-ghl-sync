@@ -3,6 +3,31 @@ import fetch from 'node-fetch';
 const WJ_BASE = 'https://api.webinarjam.com/webinarjam';
 const EW_BASE = 'https://api.webinarjam.com/everwebinar';
 
+// ─── GeoIP timezone lookup ────────────────────────────────────
+// Used when EW's /registrants API doesn't return a timezone for the registrant
+// (which is almost always — EW omits it from the bulk list response).
+// ipapi.co is free up to ~30k/month, uses HTTPS, returns IANA timezone strings.
+// Cache by IP to avoid duplicate lookups for the same registrant across handlers.
+const geoipCache = new Map();
+
+async function geoipTimezone(ip) {
+  if (!ip) return '';
+  if (geoipCache.has(ip)) return geoipCache.get(ip);
+  try {
+    const res = await fetch(`https://ipapi.co/${ip}/json/`, {
+      headers: { 'User-Agent': 'webinar-ghl-sync/1.0' },
+    });
+    if (!res.ok) return '';
+    const data = await res.json();
+    const tz = (data.timezone || '').trim();
+    if (tz) geoipCache.set(ip, tz);
+    return tz;
+  } catch (e) {
+    console.warn('⚠️  GeoIP lookup failed:', e.message);
+    return '';
+  }
+}
+
 // ─── Per-client cache of resolved webinar IDs ────────────────
 const webinarIdCache = new Map();
 
@@ -276,12 +301,19 @@ export async function fetchRegistrantData(apiKey, webinarRef, email) {
     if (scheduleId) console.log(`🎯 Schedule ID: ${scheduleId}`);
 
     // Registrant's timezone — the one they picked on the registration page.
-    // EW/WJ /registrants returns this as `timezone` (sometimes `time_zone`)
-    // in IANA format, e.g. "Asia/Karachi". This is what we use to convert
-    // the event time into EST. Falls through cleanly to '' if missing —
-    // caller will then try the webhook payload's lead.timezone instead.
-    const registrantTimezone = (reg.timezone || reg.time_zone || '').trim();
-    if (registrantTimezone) console.log(`🌍 Registrant timezone: ${registrantTimezone}`);
+    // EW's /registrants API does NOT return this field (confirmed via API audit).
+    // So we fall back to GeoIP lookup using the registrant's ip_address, which
+    // IS returned by /registrants. This is the most reliable way to get the
+    // registrant's timezone for "auto-detect user timezone" webinars.
+    let registrantTimezone = (reg.timezone || reg.time_zone || '').trim();
+    if (registrantTimezone) {
+      console.log(`🌍 Registrant timezone (from API): ${registrantTimezone}`);
+    } else if (reg.ip_address && reg.ip_address !== '127.0.0.1' && reg.ip_address !== '::1') {
+      console.log(`🔍 No timezone in API — trying GeoIP for ${reg.ip_address}`);
+      registrantTimezone = await geoipTimezone(reg.ip_address);
+      if (registrantTimezone) console.log(`🌍 Registrant timezone (GeoIP): ${registrantTimezone}`);
+      else console.warn('⚠️  GeoIP lookup returned no timezone');
+    }
 
     return {
       platform,

@@ -43,14 +43,13 @@ export async function handleRegistration(client, raw) {
     // NOT use the webinar account's `w.timezone` — that's the OWNER's TZ,
     // which gives wrong EST conversions whenever a registrant is in a
     // different timezone than the webinar host.
-    // Priority: registrant's own timezone (if EW returns it) > webhook payload timezone
-    // > webinar's configured timezone (always available from the API).
-    // The webinar's timezone is the correct source for the event time since
-    // reg.event is always expressed in the webinar's configured timezone.
+    // Priority: registrant's timezone (from API or GeoIP, resolved in fetchRegistrantData)
+    // > webhook payload timezone (lead.timezone — EW rarely sends this).
+    // We no longer use reg.webinarTimezone (w.timezone) because for auto-detect
+    // timezone webinars it returns the owner's timezone (EST), not the registrant's.
     const sourceTimezone =
-      reg.registrantTimezone ||   // registrant's selected TZ (ideal, often missing)
-      data.registrantTimezone ||  // webhook lead.timezone (EW rarely sends this)
-      reg.webinarTimezone;        // webinar's configured TZ (reliable fallback)
+      reg.registrantTimezone ||   // from /registrants API field OR GeoIP (preferred)
+      data.registrantTimezone;    // from webhook lead.timezone (rarely present)
     if (sourceTimezone) data.webinarTimezone = sourceTimezone;
     if (reg.registeredAt)   data.registeredAt   = reg.registeredAt;
     if (reg.liveRoomLink)   data.liveRoomLink   = reg.liveRoomLink;
