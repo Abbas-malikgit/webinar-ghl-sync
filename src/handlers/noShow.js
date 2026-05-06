@@ -32,7 +32,10 @@ export async function handleNoShow(client, raw) {
     data.replayWatched = reg.attendedReplay === 1;
     if (reg.scheduledDate)  data.scheduledDate  = reg.scheduledDate;
     if (reg.scheduledTime)  data.scheduledTime  = reg.scheduledTime;
-    if (reg.webinarTimezone) data.webinarTimezone = reg.webinarTimezone;
+    // Use registrant's TZ (from API, falling back to webhook lead.timezone)
+    // — same logic as registration.js. See note there.
+    const sourceTimezone = reg.registrantTimezone || data.registrantTimezone;
+    if (sourceTimezone) data.webinarTimezone = sourceTimezone;
 
     pipeline.apiEnrichment = reg;
     pipeline.steps.push({
@@ -122,7 +125,10 @@ export async function handleReplayWatched(client, raw) {
     if (reg.platform)       data.webinarType    = reg.platform;
     if (reg.scheduledDate)  data.scheduledDate  = reg.scheduledDate;
     if (reg.scheduledTime)  data.scheduledTime  = reg.scheduledTime;
-    if (reg.webinarTimezone) data.webinarTimezone = reg.webinarTimezone;
+    // Use registrant's TZ (from API, falling back to webhook lead.timezone)
+    // — same logic as registration.js. See note there.
+    const sourceTimezone = reg.registrantTimezone || data.registrantTimezone;
+    if (sourceTimezone) data.webinarTimezone = sourceTimezone;
     if (reg.timeReplayMins) data.timeWatched    = reg.timeReplayMins;
 
     pipeline.apiEnrichment = reg;
