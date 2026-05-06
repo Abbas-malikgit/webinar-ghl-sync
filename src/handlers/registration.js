@@ -37,12 +37,13 @@ export async function handleRegistration(client, raw) {
     if (reg.platform)       data.webinarType = reg.platform;
     if (reg.scheduledDate)  data.scheduledDate = reg.scheduledDate;
     if (reg.scheduledTime)  data.scheduledTime = reg.scheduledTime;
-    // Client-level override takes priority — EverWebinar's w.timezone is the
-    // webinar owner's account timezone, but reg.event times for JIT sessions
-    // are returned in the registrant's local timezone. If those don't match,
-    // set webinarEventTimezone on the client to the actual source timezone
-    // (e.g. "Asia/Karachi") so the EST conversion is correct.
-    const sourceTimezone = client.webinarEventTimezone || reg.webinarTimezone;
+    // The registrant's selected timezone — same TZ that reg.event is in.
+    // Prefer the API value (canonical), fall back to the webhook payload
+    // (lead.timezone, captured in normalizePayload). We deliberately do
+    // NOT use the webinar account's `w.timezone` — that's the OWNER's TZ,
+    // which gives wrong EST conversions whenever a registrant is in a
+    // different timezone than the webinar host.
+    const sourceTimezone = reg.registrantTimezone || data.registrantTimezone;
     if (sourceTimezone) data.webinarTimezone = sourceTimezone;
     if (reg.registeredAt)   data.registeredAt   = reg.registeredAt;
     if (reg.liveRoomLink)   data.liveRoomLink   = reg.liveRoomLink;

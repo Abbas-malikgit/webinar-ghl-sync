@@ -170,23 +170,11 @@ export async function fetchRegistrantData(apiKey, webinarRef, email) {
     if (!resolved) return null;
     const { base, apiId, platform } = resolved;
 
-    // Fetch webinar timezone — needed to convert event time to EST.
-    // We already know the platform (base), so call it directly.
-    let webinarTimezone = '';
-    try {
-      const tzRes = await fetch(`${base}/webinar`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ api_key: apiKey, webinar_id: Number(apiId) }),
-      });
-      const tzData = await tzRes.json();
-      if (tzData?.status === 'success' && tzData?.webinar?.timezone) {
-        webinarTimezone = tzData.webinar.timezone;
-        console.log(`🌍 Webinar timezone: ${webinarTimezone}`);
-      }
-    } catch (e) {
-      console.warn('⚠️  Could not fetch webinar timezone:', e.message);
-    }
+    // Note: we used to also fetch the webinar's account `timezone` (w.timezone)
+    // here for the EST conversion. That was wrong — w.timezone is the webinar
+    // OWNER's timezone, not the registrant's. The registrant's timezone (the
+    // one they picked on the registration page) lives on the registrant
+    // record itself (reg.timezone), and that's what we now use below.
 
     const res = await fetch(`${base}/registrants`, {
       method: 'POST',
@@ -275,12 +263,20 @@ export async function fetchRegistrantData(apiKey, webinarRef, email) {
     }
     if (scheduleId) console.log(`🎯 Schedule ID: ${scheduleId}`);
 
+    // Registrant's timezone — the one they picked on the registration page.
+    // EW/WJ /registrants returns this as `timezone` (sometimes `time_zone`)
+    // in IANA format, e.g. "Asia/Karachi". This is what we use to convert
+    // the event time into EST. Falls through cleanly to '' if missing —
+    // caller will then try the webhook payload's lead.timezone instead.
+    const registrantTimezone = (reg.timezone || reg.time_zone || '').trim();
+    if (registrantTimezone) console.log(`🌍 Registrant timezone: ${registrantTimezone}`);
+
     return {
       platform,
       scheduledDate,
       scheduledTime,
-      webinarTimezone,                   // IANA tz string e.g. "America/New_York"
-      scheduleId,                        // NEW — for per-schedule workflow overrides
+      registrantTimezone,                // IANA tz string e.g. "Asia/Karachi"
+      scheduleId,                        // for per-schedule workflow overrides
       registeredAt,
       attendedLive,
       dateLive,
@@ -381,6 +377,13 @@ export function normalizePayload(raw) {
   const phoneNumber  = (lead.phone_number || raw.phone || '').trim();
   const phone = buildE164(phoneCountry, phoneNumber);
 
+  // The registrant's timezone (the one they picked on the registration page).
+  // EW/WJ webhooks send this as `lead.timezone` (sometimes `lead.time_zone`).
+  // This is what we want for EST conversion — NOT the webinar owner's
+  // account timezone, which is irrelevant when registrants are scattered
+  // across timezones.
+  const registrantTimezone = (lead.timezone || lead.time_zone || '').trim();
+
   return {
     firstName,
     lastName,
@@ -392,6 +395,7 @@ export function normalizePayload(raw) {
     scheduledDate: '',
     scheduledTime: '',
     registeredAt:  new Date().toISOString(),
+    registrantTimezone,                              // from webhook payload
     attended:      undefined,
     replayWatched: undefined,
     liveRoomLink:   links.live_room   || links.live   || '',

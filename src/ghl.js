@@ -32,10 +32,13 @@ function dateField(key, value) {
 }
 
 // Converts scheduledDate (YYYY-MM-DD) + scheduledTime ("8:00 AM") from the
-// webinar's configured IANA timezone into EST, formatted as MM-DD-YYYY HH:MM AM/PM.
-// Uses the native Intl API — no extra dependencies needed.
-function convertToEST(dateStr, timeStr, webinarTimezone) {
-  if (!dateStr || !timeStr) return null;
+// given source timezone into EST, formatted as MM-DD-YYYY HH:MM AM/PM.
+// `sourceTimezone` is the timezone the date/time string is *in* — i.e. the
+// registrant's selected timezone, NOT the webinar account's.
+// Accepts IANA names ("Asia/Karachi") and numeric offsets ("GMT+05:00",
+// "+05:00", "UTC-04:00"). Anything else returns null (better blank than wrong).
+function convertToEST(dateStr, timeStr, sourceTimezone) {
+  if (!dateStr || !timeStr || !sourceTimezone) return null;
 
   const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
   if (!match) return null;
@@ -49,29 +52,53 @@ function convertToEST(dateStr, timeStr, webinarTimezone) {
   const [year, month, day] = dateStr.split('-').map(Number);
   if (!year || !month || !day) return null;
 
+  const tz = String(sourceTimezone).trim();
   let utcMs;
 
-  if (webinarTimezone) {
+  // Numeric offset format: "GMT+05:00", "+05:00", "UTC-04:00", "+5", "-4:30"
+  const offsetMatch = tz.match(/^(?:GMT|UTC)?\s*([+-])(\d{1,2})(?::?(\d{2}))?$/i);
+  if (offsetMatch) {
+    const sign  = offsetMatch[1] === '-' ? -1 : 1;
+    const offH  = parseInt(offsetMatch[2], 10);
+    const offM  = parseInt(offsetMatch[3] || '0', 10);
+    const offMs = sign * (offH * 3600000 + offM * 60000);
+    // local = UTC + offset → UTC = local - offset
+    utcMs = Date.UTC(year, month - 1, day, h, m) - offMs;
+  } else {
+    // IANA name path. We want: the UTC instant that, when rendered in `tz`,
+    // shows the desired wall-clock time.
+    //
+    // Trick: pick a "fake UTC" instant whose UTC components match the desired
+    // wall-clock components. Format that instant in `tz` to read back what tz
+    // *thinks* it is. The signed difference between fakeUTC and that readback
+    // (apparentLocal) IS the timezone offset.
+    //
+    // IMPORTANT: read year/month/day from the formatted parts too, not just
+    // hour/minute. Otherwise late-night times in positive-offset zones (e.g.
+    // 23:45 Karachi → format shows 04:45 *next day*) lose 24h and you get
+    // a result that's exactly one day off. That was the original bug.
     try {
-      // "Fake UTC" trick: treat the local time as UTC, then measure how far off
-      // the timezone makes it, and shift back to get the real UTC instant.
       const fakeUTC = new Date(Date.UTC(year, month - 1, day, h, m));
       const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone: webinarTimezone,
+        timeZone: tz,
+        year: 'numeric', month: '2-digit', day: '2-digit',
         hour: '2-digit', minute: '2-digit', hour12: false,
       }).formatToParts(fakeUTC).reduce((a, p) => { a[p.type] = p.value; return a; }, {});
 
-      const tzH = parseInt(parts.hour === '24' ? '0' : parts.hour);
-      const tzM = parseInt(parts.minute);
-      utcMs = fakeUTC.getTime() + (h - tzH) * 3600000 + (m - tzM) * 60000;
+      const aY = parseInt(parts.year);
+      const aMo = parseInt(parts.month);
+      const aD = parseInt(parts.day);
+      const aH = parseInt(parts.hour === '24' ? '0' : parts.hour);
+      const aMin = parseInt(parts.minute);
+      const apparentLocalMs = Date.UTC(aY, aMo - 1, aD, aH, aMin);
+
+      // offset = apparentLocal - fakeUTC; realUTC = fakeUTC - offset
+      utcMs = 2 * fakeUTC.getTime() - apparentLocalMs;
     } catch {
-      // Unrecognised timezone string — fall back to treating the time as-is
-      console.warn(`⚠️  Unrecognised webinar timezone "${webinarTimezone}" — skipping conversion`);
-      utcMs = Date.UTC(year, month - 1, day, h, m);
+      // Unrecognised — better blank than wrong
+      console.warn(`⚠️  Unrecognised timezone "${tz}" — leaving Event Time in EST blank`);
+      return null;
     }
-  } else {
-    // No timezone info at all — can't convert, skip the field
-    return null;
   }
 
   const estParts = new Intl.DateTimeFormat('en-US', {
@@ -94,6 +121,9 @@ function buildCustomFields(data) {
 
   // Combined date+time in EST for GHL "Set Event Time" workflow action
   const estFormatted = convertToEST(data.scheduledDate, data.scheduledTime, data.webinarTimezone);
+  if (data.scheduledDate && data.scheduledTime) {
+    console.log(`🕐 EST conversion: ${data.scheduledDate} ${data.scheduledTime} (${data.webinarTimezone || 'NO TZ'}) → ${estFormatted || 'BLANK'}`);
+  }
   push(field(FIELDS.eventTimeInEst, estFormatted));
 
   if (data.attended !== undefined)
