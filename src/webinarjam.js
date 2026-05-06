@@ -170,11 +170,23 @@ export async function fetchRegistrantData(apiKey, webinarRef, email) {
     if (!resolved) return null;
     const { base, apiId, platform } = resolved;
 
-    // Note: we used to also fetch the webinar's account `timezone` (w.timezone)
-    // here for the EST conversion. That was wrong — w.timezone is the webinar
-    // OWNER's timezone, not the registrant's. The registrant's timezone (the
-    // one they picked on the registration page) lives on the registrant
-    // record itself (reg.timezone), and that's what we now use below.
+    // Fetch the webinar's configured timezone as a fallback for EST conversion.
+    // EverWebinar webhooks don't include the registrant's timezone, and the
+    // /registrants API often doesn't return it either. The webinar's own
+    // timezone (w.timezone) is the correct source timezone for reg.event —
+    // it's the timezone the scheduled session time is expressed in. For JIT
+    // webinars using auto-detect, EW adapts the session to the registrant's
+    // timezone, in which case reg.timezone (checked below) takes priority.
+    let webinarTimezone = '';
+    try {
+      const details = await getWebinarDetails(apiKey, apiId);
+      if (details?.timezone) {
+        webinarTimezone = details.timezone;
+        console.log(`🌐 Webinar timezone from API: ${webinarTimezone}`);
+      }
+    } catch (e) {
+      console.warn('⚠️  Could not fetch webinar details for timezone:', e.message);
+    }
 
     const res = await fetch(`${base}/registrants`, {
       method: 'POST',
@@ -275,7 +287,8 @@ export async function fetchRegistrantData(apiKey, webinarRef, email) {
       platform,
       scheduledDate,
       scheduledTime,
-      registrantTimezone,                // IANA tz string e.g. "Asia/Karachi"
+      registrantTimezone,                // IANA tz string e.g. "Asia/Karachi" (from registrant record)
+      webinarTimezone,                    // IANA tz string from webinar config (fallback)
       scheduleId,                        // for per-schedule workflow overrides
       registeredAt,
       attendedLive,
