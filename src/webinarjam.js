@@ -239,13 +239,6 @@ export async function fetchRegistrantData(apiKey, webinarRef, email) {
     }
 
     console.log('✅ Registrant found:', reg.email);
-    // 🔬 DIAGNOSTIC — log all fields EW returns on the registrant object
-    // so we can find the correct timezone/IP field names. Remove once confirmed.
-    const diagFields = Object.fromEntries(
-      Object.entries(reg).filter(([, v]) => v !== null && v !== '' && v !== 0)
-    );
-    console.log('🔬 Registrant fields:', JSON.stringify(diagFields));
-
     let scheduledDate = '';
     let scheduledTime = '';
     if (reg.event) {
@@ -314,9 +307,9 @@ export async function fetchRegistrantData(apiKey, webinarRef, email) {
     let registrantTimezone = (reg.timezone || reg.time_zone || '').trim();
     if (registrantTimezone) {
       console.log(`🌍 Registrant timezone (from API): ${registrantTimezone}`);
-    } else if (reg.ip_address && reg.ip_address !== '127.0.0.1' && reg.ip_address !== '::1') {
-      console.log(`🔍 No timezone in API — trying GeoIP for ${reg.ip_address}`);
-      registrantTimezone = await geoipTimezone(reg.ip_address);
+    } else if (reg.ip && reg.ip !== '127.0.0.1' && reg.ip !== '::1') {
+      console.log(`🔍 No timezone in API — trying GeoIP for ${reg.ip}`);
+      registrantTimezone = await geoipTimezone(reg.ip);
       if (registrantTimezone) console.log(`🌍 Registrant timezone (GeoIP): ${registrantTimezone}`);
       else console.warn('⚠️  GeoIP lookup returned no timezone');
     }
@@ -418,9 +411,7 @@ export function resolveWorkflows(client, payload, enrichment = null) {
 
 export function normalizePayload(raw) {
   const lead    = raw.lead    || {};
-  // 🔬 DIAGNOSTIC — log all fields EW sends in the webhook lead object
-  // so we can find the correct timezone field name. Remove once confirmed.
-  console.log('🔬 Webhook lead fields:', JSON.stringify(lead));
+
   const webinar = raw.webinar || {};
   const links   = raw.links   || {};
 
